@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+{% block title %}Camera management - CSD FARS{% endblock %}
+{% block head %}
+<style>
+.camera-connection-control { width: 100%; min-height: 42px; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm); }
+#wizard-camera-form label { display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.camera-discovery-card { padding: var(--space-md); margin-top: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-wrap: anywhere; }
+.camera-discovery-card p { margin: var(--space-sm) 0; }
+.camera-discovery-card details, .camera-optional-settings { margin: var(--space-md) 0; }
+.camera-discovery-card summary, .camera-optional-settings > summary { cursor: pointer; font-weight: var(--font-weight-semibold); padding: var(--space-sm) 0; }
+.camera-discovery-card .camera-found-status { color: var(--color-primary); font-weight: var(--font-weight-semibold); }
+.camera-discovery-card dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-xs) var(--space-md); font-size: var(--font-size-sm); }
+.camera-discovery-card dd { margin: 0; }
+#camera-selection-status:empty, #camera-discovery-status:empty { display: none; }
+#test-error-checks li { margin-bottom: var(--space-sm); }
+.camera-management-layout--room-first { display: block; }
+.camera-inventory-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); margin: var(--space-sm) 0; overflow-wrap: anywhere; }
+.camera-inventory-card .camera-room-section__actions { flex-wrap: wrap; margin-top: var(--space-sm); }
+.camera-inventory-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: end; margin-bottom: var(--space-md); }
+.camera-inventory-toolbar label { display: grid; gap: var(--space-xs); flex: 1; min-width: 150px; }
+.camera-inventory-toolbar input, .camera-inventory-toolbar select { width: 100%; min-height: 42px; }
+.camera-page-toolbar, .camera-view-switch, .camera-page-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
+.camera-page-toolbar { justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-sm); }
+.camera-view-switch { padding: var(--space-xs); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-card); }
+.camera-view-switch [aria-pressed="true"] { background: var(--color-accent); border-color: var(--color-accent); color: #fff; box-shadow: inset 0 -3px 0 rgba(255,255,255,.5); font-weight: var(--font-weight-semibold); }
+#camera-management-message:empty { display: none; }
+#camera-refresh-message { margin-bottom: var(--space-lg); }
+.camera-inventory-pagination { display: flex; gap: var(--space-md); flex-wrap: wrap; align-items: center; margin: var(--space-lg) 0; }
+#camera-editor[hidden], #camera-inventory[hidden], #camera-room-board[hidden] { display: none; }
+#camera-editor { width: 100%; overflow-wrap: anywhere; }
+#camera-editor [hidden] { display: none; }
+#camera-workspace-navigation [aria-pressed="true"] { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+#camera-removal-panel { margin: var(--space-lg) 0; padding: var(--space-lg); border: 2px solid var(--color-border); border-radius: var(--radius-md); overflow-wrap: anywhere; }
+#camera-removal-panel[hidden], #camera-removal-panel [hidden] { display: none; }
+#camera-removal-blockers > li { margin-bottom: var(--space-lg); }
+#camera-removal-blockers p, #camera-removal-blockers li li { margin: var(--space-sm) 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h2>Camera management</h2>
+    <p class="text-muted">Optionally connect a USB camera, a CCTV camera or recorder, or a compatible network video stream to a room. Test its connection and view before use.</p>
+</div>
+
+{% if synthetic_camera_review|default(false) %}
+<aside id="camera-practice-notice" class="flash flash--warning" aria-labelledby="camera-practice-title">
+    <h3 id="camera-practice-title">Practice environment: synthetic cameras and rooms</h3>
+    <p>You can practice saving camera settings, changing availability, retiring or restoring devices, and reviewing removal. Changes affect only this disposable practice data.</p>
+    <p>Find cameras, camera tests and live previews are unavailable here because hardware and network access are disabled. Use invented connection details only. Saved health results are example scenarios, not real camera checks.</p>
+</aside>
+{% endif %}
+
+<p class="flash flash--warning">Camera and viewing limits control new connections. Verify performance on this computer and school network before increasing these limits.</p>
+<details class="card" style="padding:var(--space-md); margin-bottom:var(--space-lg)">
+    <summary>Camera and viewing limits</summary>
+    <p>Configured limits do not establish how many cameras or viewers this computer and school network can support. Setting a limit to zero prevents new use of that type. Existing sessions continue, and a camera stays reserved until its stop is confirmed.</p>
+    <form id="camera-capacity-form" style="display:flex; gap:var(--space-md); flex-wrap:wrap; align-items:end">
+        <label>Camera attendance sessions <input name="recognition" type="number" min="0" max="64" step="1" required></label>
+        <label>Video viewers <input name="viewers" type="number" min="0" max="64" step="1" required></label>
+        <label>Other camera checks and previews <input name="secondary" type="number" min="0" max="64" step="1" required></label>
+        <button class="btn btn--secondary" type="submit">Save limits</button>
+    </form>
+    <p id="camera-capacity-message" role="status" aria-live="polite">Checking saved limits…</p>
+</details>
+
+<div class="camera-page-toolbar">
+    <div class="camera-view-switch" role="group" aria-label="Camera management views">
+        <button type="button" id="show-camera-inventory" class="btn btn--secondary" aria-controls="camera-inventory" aria-pressed="true">Camera inventory</button>
+        <button type="button" id="show-room-coverage" class="btn btn--secondary" aria-controls="camera-room-board" aria-pressed="false">Room coverage</button>
+    </div>
+    <div class="camera-page-actions" role="group" aria-label="Camera actions">
+        <button type="button" id="btn-add-camera" class="btn btn--secondary" aria-controls="camera-editor">Add camera</button>
+        <button type="button" id="btn-refresh-inventory" class="btn btn--secondary" aria-describedby="camera-refresh-message">Refresh saved status</button>
+    </div>
+</div>
+<p id="camera-management-message" role="status" aria-live="polite"></p>
+<p id="camera-refresh-message" class="form-hint" role="status" aria-live="polite">Loading saved camera information…</p>
+
+<section id="camera-inventory" aria-labelledby="camera-inventory-title">
+    <h3 id="camera-inventory-title" tabindex="-1">Camera inventory</h3>
+    <p>Manage current devices and retained history. Saving settings does not open a camera. Test is a separate action.</p>
+    <p class="form-hint">Ready allows attendance and registration; it does not confirm a working picture. Inactive, Maintenance and Retired are unavailable for attendance. Retire preserves history; Review removal checks whether an unused camera can be deleted.</p>
+    <p class="form-hint">
+        {% if has_permission('manage_classes') %}<a href="{{ url_for('classes.manage_classes') }}">Review classes and attendance</a> · {% endif %}
+        {% if has_permission('manage_locations') %}<a href="{{ url_for('settings.manage_locations') }}">Manage room availability</a>{% else %}Ask the Dean about room availability or the owning teacher about open attendance.{% endif %}
+    </p>
+    <div class="camera-inventory-toolbar">
+        <label for="camera-inventory-search">Search cameras and locations<input type="search" id="camera-inventory-search" placeholder="Camera name, room, building or floor"></label>
+        <label for="camera-inventory-view">Show<select id="camera-inventory-view"><option value="current">Current devices</option><option value="inactive">Inactive / Retired</option><option value="all">All cameras</option></select></label>
+        <button type="button" id="camera-inventory-clear" class="btn btn--secondary">Clear search and filters</button>
+    </div>
+    <p id="camera-inventory-count" role="status" aria-live="polite">Loading camera inventory…</p>
+    <div id="camera-inventory-list"></div>
+    <div class="camera-inventory-pagination"><button type="button" id="camera-page-prev" class="btn btn--secondary">Previous cameras</button><span id="camera-page-label"></span><button type="button" id="camera-page-next" class="btn btn--secondary">Next cameras</button></div>
+</section>
+<div class="camera-management-layout camera-management-layout--room-first">
+    <!-- Progressive 3-Step Wizard -->
+    <div id="camera-editor" hidden class="wizard-container card" style="max-width: 800px; margin: 0 auto; background: var(--color-bg-card); padding: var(--space-xl); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <div class="camera-inventory-toolbar"><h3 id="camera-editor-title">Set up camera</h3><button type="button" id="btn-cancel-camera" class="btn btn--secondary">Back to camera inventory</button></div>
+        <p id="camera-workspace-context"></p><p id="camera-workspace-unsaved" class="form-hint" role="status"></p>
+        <div id="camera-workspace-navigation" hidden class="camera-inventory-toolbar" aria-label="Selected camera settings"><button type="button" id="camera-section-configuration" class="btn btn--secondary" aria-pressed="true">Configuration</button><button type="button" id="camera-section-availability" class="btn btn--secondary" aria-pressed="false">Availability</button><button type="button" id="camera-section-removal" class="btn btn--secondary" aria-pressed="false">Removal</button></div>
+        <p id="camera-save-status" role="status" aria-live="polite"></p>
+        <div id="camera-configuration-section">
+        <div class="wizard-stepper" style="display: flex; justify-content: space-between; margin-bottom: var(--space-xl); border-bottom: 2px solid var(--color-border); padding-bottom: var(--space-md);">
+            <div class="step active" id="step-1-nav" aria-current="step">1. Room Details</div>
+            <div class="step" id="step-2-nav">2. Camera Setup</div>
+            <div class="step" id="step-3-nav">3. Test & Verify</div>
+        </div>
+
+        <!-- Step 1: Room -->
+        <div id="wizard-step-1">
+            <h3 style="margin-bottom: var(--space-xs);">Classroom Identification</h3>
+            <p class="text-muted" style="margin-bottom: var(--space-lg);">Select an existing Room from the Dean-managed institutional hierarchy.</p>
+            
+            <div class="form-group" style="margin-bottom: var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border);">
+                <label for="wizard-room-select" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Institutional Room</label>
+                <select id="wizard-room-select" required style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <option value="">Select room...</option>
+                    {% for room in rooms %}
+                    <option value="{{ room.id }}">{{ room.hierarchy_display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if has_permission('manage_locations') %}
+            <p><a href="{{ url_for('settings.manage_locations') }}" class="btn btn--secondary btn--sm">Manage Buildings, Floors, and Rooms</a></p>
+            {% endif %}
+            <div style="text-align: right; margin-top: var(--space-lg);">
+                <button type="button" id="btn-next-to-2" class="btn btn--primary" style="padding: var(--space-sm) var(--space-lg);">Next: Camera Setup &rarr;</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Camera -->
+        <div id="wizard-step-2" style="display: none;">
+            <h3 style="margin-bottom: var(--space-xs);">Camera Configuration</h3>
+            <p class="text-muted" style="margin-bottom: var(--space-lg);">Find your camera, enter its login, then check the picture. You can keep using manual attendance while a camera is being set up.</p>
+            
+            <form id="wizard-camera-form">
+                <input type="hidden" id="camera-id">
+                
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                    <label for="camera-name" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Camera Name <span style="color: var(--color-error);">*</span></label>
+                    <input type="text" id="camera-name" required placeholder="e.g. Room 101 Front Camera" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                </div>
+
+                <div class="form-group" style="margin-bottom: var(--space-md);">
+                    <label for="camera-connection-kind">How is the camera connected?</label>
+                    <select id="camera-connection-kind" class="camera-connection-control" aria-describedby="camera-source-help">
+                        <option id="camera-keep-connection" value="keep" hidden>Keep saved connection</option>
+                        <option value="rtsp" selected>Network cable or Wi-Fi</option>
+                        <option value="local">USB cable into the CSD FARS computer</option>
+                        <option value="stream">I have a video stream address</option>
+                    </select>
+                </div>
+                <p id="camera-source-help" class="text-muted" style="margin-bottom: var(--space-md);">Power on the camera and connect it to the same router or switch as this system. Then select Find cameras.</p>
+                <div id="camera-local-fields" style="display: none; margin-bottom: var(--space-md);">
+                    <label for="camera-local-index">Camera device index</label>
+                    <input id="camera-local-index" class="camera-connection-control" type="number" min="0" step="1" placeholder="0" aria-describedby="camera-local-help">
+                    <p id="camera-local-help" class="text-muted">Use 0 for the first USB, built-in or virtual webcam; try 1 or 2 for another device. It must be available on the computer running CSD FARS, which may differ from the computer running your browser. No camera password is needed.</p>
+                </div>
+                <div id="camera-rtsp-fields">
+                <div style="margin-bottom: var(--space-md);">
+                    <button type="button" id="btn-discover-cameras" class="btn btn--secondary" style="width: 100%; padding: var(--space-sm) var(--space-md);">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: text-bottom;"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                        Find cameras
+                    </button>
+                    <p id="camera-discovery-help" class="form-hint">Finding a camera only confirms that a device replied. It does not verify the camera login or video stream. Save its details, then use Test saved camera to check for a readable picture.</p>
+                    {% if synthetic_camera_review|default(false) %}
+                    <p id="camera-practice-discovery-help" class="form-hint">Find cameras is unavailable in this practice environment. Enter invented details manually to practice saving a camera.</p>
+                    {% endif %}
+                    <p id="camera-discovery-status" role="status" aria-live="polite" class="text-muted"></p>
+                    <div id="discover-results" style="margin-top: var(--space-sm); display: none;"></div>
+                    <details class="camera-optional-settings">
+                        <summary>Search options</summary>
+                        <label for="camera-search-network">Network connection to search</label>
+                        <select id="camera-search-network" class="camera-connection-control"><option value="">Choose automatically</option></select>
+                        <p class="text-muted">The system searches from the computer running CSD FARS. This choice selects the connection for discovery only. Camera video follows Windows network routing; selecting a search connection does not bind the video to it.</p>
+                    </details>
+                    <details class="camera-optional-settings">
+                        <summary>Using Wi-Fi and a camera network together</summary>
+                        <p class="text-muted">A local camera does not need internet access. Wi-Fi for internet and a wired camera network can both stay connected when their network settings are configured correctly.</p>
+                        <p class="text-muted">If the camera test works only after Wi-Fi is turned off, ask your installer to check for overlapping address ranges and confirm Windows sends camera traffic through the correct connection. This can explain the difference, but does not identify the exact cause by itself.</p>
+                        <p class="text-muted">CSD FARS does not change Windows network settings. Keep internet access available when needed; have your installer correct the routing rather than treating Wi-Fi disconnection as a permanent requirement.</p>
+                    </details>
+                </div>
+                <p id="camera-selection-status" role="status" aria-live="polite" class="flash flash--info"></p>
+                <h4>Camera login</h4>
+                <p class="text-muted">Use the camera's existing username and password, which may differ from your CSD FARS login. Ask the person who installed it if you do not know them.</p>
+                <div class="form-group camera-credential-row" style="display: flex; gap: var(--space-md); margin: var(--space-md) 0;">
+                    <div style="flex: 1; min-width: 0;">
+                        <label for="camera-username">Camera username</label>
+                        <input type="text" id="camera-username" placeholder="Camera username" autocomplete="off" class="camera-connection-control">
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <label for="camera-password">Camera password</label>
+                        <input type="password" id="camera-password" placeholder="Camera password" autocomplete="new-password" class="camera-connection-control">
+                    </div>
+                </div>
+                <details id="camera-manual-settings" class="camera-optional-settings">
+                    <summary>Connection details / manual setup</summary>
+                    <p class="text-muted">Choosing a discovered camera fills in its address. You can also enter details provided by your installer here.</p>
+                    <div class="form-group" style="margin-bottom: var(--space-md);">
+                        <label for="camera-ip" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">IP Address</label>
+                        <input type="text" id="camera-ip" placeholder="e.g. camera.example.invalid" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    </div>
+                <div class="grid responsive-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-md); margin-bottom: var(--space-md);">
+                    <div><label for="camera-rtsp-port">RTSP port</label><input id="camera-rtsp-port" class="camera-connection-control" type="number" min="1" max="65535" step="1" placeholder="554"></div>
+                    <div><label for="camera-rtsp-path">Stream / recorder channel path</label><input id="camera-rtsp-path" class="camera-connection-control" type="text" placeholder="/Streaming/Channels/101"></div>
+                </div>
+                <p class="text-muted">The channel path varies by manufacturer and recorder channel. Enter the path from your device's settings. If left blank, port 554 and /Streaming/Channels/101 are used.</p>
+                </details>
+                </div>
+                <details id="camera-url-fields" class="camera-optional-settings">
+                    <summary>Use a full video stream address</summary>
+                    <label for="camera-manual-rtsp" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Complete stream URL</label>
+                    <input type="password" id="camera-manual-rtsp" placeholder="rtsp://camera.example.invalid/stream" autocomplete="off" spellcheck="false" aria-describedby="camera-url-help" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <p id="camera-url-help" class="text-muted">A full URL overrides the address and credential fields above. Include credentials in the URL if the stream requires them. The URL is masked because it may contain a password.</p>
+                </details>
+
+                <details id="camera-performance-settings" class="camera-optional-settings" style="border-top: 1px solid var(--color-border);">
+                    <summary>Advanced picture and recognition settings</summary>
+                    <p class="text-muted" style="margin-bottom: var(--space-md); font-size: var(--font-size-sm);">Start with the defaults. Adjust these settings after checking the picture if needed.</p>
+                    
+                    <div class="grid responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-bottom: var(--space-md);">
+                        <div class="form-group">
+                            <span id="camera-resolution-label" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Resolution (Width × Height)</span>
+                            <div role="group" aria-labelledby="camera-resolution-label" style="display: flex; gap: var(--space-xs); align-items: center;">
+                                <label for="camera-width" class="visually-hidden">Resolution width in pixels</label>
+                                <input type="number" id="camera-width" value="640" style="width: 100%; padding: var(--space-sm); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                                <span aria-hidden="true">×</span>
+                                <label for="camera-height" class="visually-hidden">Resolution height in pixels</label>
+                                <input type="number" id="camera-height" value="480" style="width: 100%; padding: var(--space-sm); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="camera-fps" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Target Frame Rate (FPS)</label>
+                            <input type="number" id="camera-fps" value="30" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: var(--space-md);">
+                        <label for="camera-match-threshold" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Facial Recognition Sensitivity (Match Threshold)</label>
+                        <div style="display: flex; align-items: center; gap: var(--space-md);">
+                            <input type="range" id="camera-match-threshold" min="0.30" max="0.70" step="0.01" value="0.45" aria-describedby="camera-match-threshold-help camera-match-threshold-val" style="flex: 1;">
+                            <span id="camera-match-threshold-val" style="font-weight: bold; width: 40px; text-align: right;">0.45</span>
+                        </div>
+                        <p id="camera-match-threshold-help" class="text-muted" style="font-size: 12px; margin-top: 4px;">Lower values are stricter (fewer false positives, more missed faces). Normal attendance starts with the stricter of this camera's limit and the saved system limit. An explicit tuner test or Apply to ongoing attendance can temporarily override it.</p>
+                    </div>
+                </details>
+
+                <div class="mobile-action-row" style="text-align: right; margin-top: var(--space-lg); display: flex; justify-content: space-between;">
+                    <button type="button" id="btn-back-to-1" class="btn btn--secondary" style="padding: var(--space-sm) var(--space-lg);">&larr; Back to Room</button>
+                    <button type="submit" id="btn-next-to-3" class="btn btn--primary" style="padding: var(--space-sm) var(--space-lg); background-color: var(--color-success); border-color: var(--color-success);">Save changes</button>
+                </div>
+                <button type="button" id="btn-test-saved-camera" class="btn btn--secondary" disabled>Test saved camera</button>
+                {% if synthetic_camera_review|default(false) %}
+                <p id="camera-practice-test-help" class="form-hint">Camera tests and previews are unavailable in this practice environment. Saving settings still works; return to the list using the button above when finished.</p>
+                {% else %}
+                <p class="form-hint">Save changes first. Test opens the saved connection; it never changes availability.</p>
+                {% endif %}
+            </form>
+        </div>
+
+        <!-- Step 3: Test & Verify -->
+        <div id="wizard-step-3" style="display: none; text-align: center;">
+            <h3 id="wizard-verification-title" tabindex="-1" style="margin-bottom: var(--space-xs);">Visual Verification</h3>
+            <p class="text-muted" style="margin-bottom: var(--space-lg);">Checking the saved connection and picture. This does not start attendance or change availability.</p>
+
+            <div id="test-loading" style="margin: var(--space-xl) 0;">
+                <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: var(--space-sm);"></div>
+                <p>Connecting to camera...</p>
+                <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+            </div>
+
+            <div id="test-result" style="display: none; margin: var(--space-xl) 0;">
+                <div style="background: #000; border-radius: var(--radius-md); padding: var(--space-xs); display: inline-block; border: 2px solid var(--color-success);">
+                    <img id="test-frame" src="" alt="Camera Preview" style="max-width: 100%; max-height: 400px; display: block; border-radius: var(--radius-sm);">
+                </div>
+                <h4 id="test-status" style="color: var(--color-success); margin-top: var(--space-md);">Connection Successful!</h4>
+                <p class="text-muted">A frame was received during this test. Verify its view and image quality before starting attendance.</p>
+            </div>
+            
+            <div id="test-error" role="alert" style="display: none; margin: var(--space-xl) 0; padding: var(--space-lg); border: 1px dashed var(--color-error); border-radius: var(--radius-md); background: rgba(239,68,68,0.1);">
+                <h4 id="test-error-title" style="margin-bottom: var(--space-xs);">Camera test could not be completed</h4>
+                <p id="test-error-msg" style="color: var(--color-error);"></p>
+                <div id="test-error-guidance" hidden style="text-align: left; margin: var(--space-md) 0;">
+                    <p style="font-weight: var(--font-weight-semibold);">What to check next</p>
+                    <ol id="test-error-checks" style="padding-left: var(--space-lg);"></ol>
+                </div>
+                <p id="test-error-reference" hidden class="form-hint"></p>
+                <button type="button" id="btn-retry-test" class="btn btn--secondary" style="display: none;">Retry Camera Test</button>
+            </div>
+
+            <div class="mobile-action-row" style="text-align: right; margin-top: var(--space-lg); display: flex; justify-content: space-between;">
+                <button type="button" id="btn-back-to-2" class="btn btn--secondary" style="padding: var(--space-sm) var(--space-lg);">&larr; Edit Camera Details</button>
+                <button type="button" id="btn-finish" class="btn btn--primary" style="display: none; padding: var(--space-sm) var(--space-lg);">Return to list</button>
+            </div>
+        </div>
+        </div>
+        <section id="camera-availability-section" hidden aria-labelledby="camera-availability-title">
+            <h3 id="camera-availability-title" tabindex="-1">Camera availability</h3>
+            <p id="camera-availability-current"></p>
+            <p>Ready allows new attendance and registration use; it does not confirm a working picture. Inactive, Maintenance and Retired prevent new use and preserve saved attendance history.</p>
+            <label for="camera-workspace-availability">Choose availability</label>
+            <select id="camera-workspace-availability" class="camera-connection-control"><option value="">Choose a change…</option><option value="Ready">Ready for use / restore</option><option value="Inactive">Inactive</option><option value="Maintenance">Maintenance</option><option value="Retired">Retire</option></select>
+            <button type="button" id="camera-workspace-default" class="btn btn--secondary">Make default</button>
+            <button type="button" id="camera-availability-refresh" class="btn btn--secondary">Refresh saved availability</button>
+            <div id="camera-availability-confirmation" hidden>
+                <p id="camera-availability-impact" role="status"></p>
+                <button type="button" id="camera-availability-cancel" class="btn btn--secondary">Cancel change</button>
+                <button type="button" id="camera-availability-apply" class="btn btn--primary">Apply this change</button>
+            </div>
+            <p id="camera-availability-message" role="status" aria-live="polite"></p>
+        </section>
+        <section id="camera-removal-section" hidden aria-labelledby="camera-removal-section-title">
+            <h3 id="camera-removal-section-title" tabindex="-1">Camera removal</h3>
+            <p>Review current use, assignments and saved records before removing this camera. Review does not delete anything.</p>
+            <button type="button" id="camera-workspace-review-removal" class="btn btn--secondary">Review removal</button>
+<section id="camera-removal-panel" hidden aria-labelledby="camera-removal-title" aria-describedby="camera-removal-summary">
+    <h3 id="camera-removal-title">Review camera removal</h3>
+    <p id="camera-removal-name"></p>
+    <p id="camera-removal-summary" role="status" aria-live="polite"></p>
+    <ul id="camera-removal-blockers"></ul>
+    <p id="camera-removal-reference" class="form-hint" hidden></p>
+    <p class="form-hint">Retiring a camera preserves attendance history and keeps it under Inactive / Retired. Replace its default role and finish any current use or pending camera release before retiring it. Do not delete school records to make a camera removable.</p>
+    <div class="camera-inventory-toolbar">
+        <button type="button" id="camera-removal-cancel" class="btn btn--secondary">Cancel</button>
+        <button type="button" id="camera-removal-retry" class="btn btn--secondary" hidden>Refresh and review again</button>
+        <button type="button" id="camera-removal-retire" class="btn btn--primary" hidden disabled>Retire camera…</button>
+        <button type="button" id="camera-removal-confirm" class="btn btn--danger" hidden>Permanently delete this camera</button>
+    </div>
+</section>
+        </section>
+    </div>
+
+    <section id="camera-room-board" hidden class="camera-room-board" aria-labelledby="camera-room-board-title">
+        <div class="camera-room-board__header mobile-action-row">
+            <div>
+                <h3 id="camera-room-board-title">Room Coverage Board</h3>
+                <p>Every active room appears here, even before a camera is installed. Status shows saved checks at the last refresh. A recent pass means a check passed within the previous 5 minutes; it does not confirm recognition accuracy.</p>
+                <p id="camera-status-refreshed-at" class="form-hint" role="status"></p>
+            </div>
+        </div>
+        <div class="room-filter-panel" aria-label="Room coverage filters">
+            <div class="room-filter-panel__quick" role="group" aria-label="Quick room categories">
+                <button type="button" class="room-filter-chip is-active" data-room-category="all" aria-pressed="true">All Rooms</button>
+                <button type="button" class="room-filter-chip" data-room-category="needs_setup" aria-pressed="false">Needs Setup</button>
+                <button type="button" class="room-filter-chip" data-room-category="no_camera" aria-pressed="false">No Camera</button>
+                <button type="button" class="room-filter-chip" data-room-category="failed_maintenance" aria-pressed="false">Failed / Maintenance / Retired</button>
+                <button type="button" class="room-filter-chip" data-room-category="not_tested" aria-pressed="false">Not Tested</button>
+                <button type="button" class="room-filter-chip" data-room-category="stale" aria-pressed="false">Stale Checks</button>
+                <button type="button" class="room-filter-chip" data-room-category="ready" aria-pressed="false">Recent Passed Checks</button>
+            </div>
+            <div class="room-filter-panel__grid">
+                <div class="form-group">
+                    <label for="room-filter-search">Search Rooms</label>
+                    <input type="search" id="room-filter-search" placeholder="Room, camera, building or floor">
+                </div>
+                <div class="form-group">
+                    <label for="room-filter-building">Building</label>
+                    <select id="room-filter-building">
+                        <option value="">All Buildings</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="room-filter-floor">Floor</label>
+                    <select id="room-filter-floor">
+                        <option value="">All Floors</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="room-filter-type">Room Type</label>
+                    <select id="room-filter-type">
+                        <option value="">All Types</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="room-filter-health">Camera Health</label>
+                    <select id="room-filter-health">
+                        <option value="">All Health States</option>
+                        <option value="Failed">Failed</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="No Camera">No Camera</option>
+                        <option value="Not Tested">Not Tested</option>
+                        <option value="Healthy">Recent passed check</option>
+                        <option value="Stale">Stale</option>
+                        <option value="Retired">Retired</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="room-filter-coverage">Coverage</label>
+                    <select id="room-filter-coverage">
+                        <option value="">All Coverage</option>
+                        <option value="has_camera">Has Camera</option>
+                        <option value="no_camera">No Camera</option>
+                        <option value="inactive_camera">Has Inactive Camera</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="room-filter-assignment">Assignment</label>
+                    <select id="room-filter-assignment">
+                        <option value="">All Assignments</option>
+                        <option value="has_classes">Has Assigned Classes</option>
+                        <option value="no_classes">No Assigned Classes</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="room-group-by">Group By</label>
+                    <select id="room-group-by">
+                        <option value="">None</option>
+                        <option value="building">Building</option>
+                        <option value="floor">Floor</option>
+                        <option value="room_type">Room Type</option>
+                    </select>
+                </div>
+            </div>
+            <div class="room-filter-panel__footer">
+                <span id="room-filter-count" role="status" aria-live="polite">0 rooms shown</span>
+                <button type="button" id="room-filter-clear" class="btn btn--secondary btn--sm">Clear Filters</button>
+            </div>
+        </div>
+        <p id="camera-coverage-status" role="status" aria-live="polite" class="text-muted"></p>
+        <div id="camera-room-groups" class="camera-room-groups">
+            <div class="camera-empty-state">Loading room coverage...</div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.CSD_FARS_ROOMS = {{ rooms|tojson }};
+    window.CSD_FARS_ROOM_COVERAGE = {{ room_coverage|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/camera-discovery.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/cameras.js') }}?v=9"></script>
+{% endblock %}

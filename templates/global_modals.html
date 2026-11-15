@@ -1,0 +1,22 @@
+<!-- Global Alert Modal -->
+<div id="global-alert-modal" class="global-modal" style="display: none;" aria-hidden="true">
+    <div class="global-modal__dialog" role="alertdialog" aria-modal="true" aria-labelledby="global-alert-title" aria-describedby="global-alert-message" tabindex="-1">
+        <h3 id="global-alert-title" style="margin-bottom: var(--space-sm); font-size: var(--font-size-lg);">Notice</h3>
+        <p id="global-alert-message" class="text-muted" style="margin-bottom: var(--space-lg); font-size: var(--font-size-md); white-space: pre-wrap;"></p>
+        <div style="text-align: right;">
+            <button type="button" id="global-alert-btn-ok" class="btn btn--primary" style="padding: var(--space-sm) var(--space-xl);">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Global Confirm Modal -->
+<div id="global-confirm-modal" class="global-modal" style="display: none;" aria-hidden="true">
+    <div class="global-modal__dialog global-modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="global-confirm-title" aria-describedby="global-confirm-message" tabindex="-1">
+        <h3 id="global-confirm-title" style="margin-bottom: var(--space-sm); font-size: var(--font-size-lg);">Confirmation Required</h3>
+        <p id="global-confirm-message" class="text-muted" style="margin-bottom: var(--space-lg); font-size: var(--font-size-md); white-space: pre-wrap;"></p>
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-md);">
+            <button type="button" id="global-confirm-btn-cancel" class="btn btn--secondary" style="padding: var(--space-sm) var(--space-lg);">Cancel</button>
+            <button type="button" id="global-confirm-btn-ok" class="btn btn--primary" style="padding: var(--space-sm) var(--space-lg);">Confirm</button>
+        </div>
+    </div>
+</div>

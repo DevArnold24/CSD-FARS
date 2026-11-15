@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}About CSD FARS{% endblock %}
+{% block body %}
+    {% if session.get('user_id') %}
+        {{ super() }}
+    {% else %}
+        <main id="main-content" tabindex="-1">{{ self.content() }}</main>
+    {% endif %}
+{% endblock %}
+{% block content %}
+    <div class="about-page">
+        <section class="about-hero">
+            <div class="about-hero-lockup">
+                <div class="about-hero-logos" aria-label="Institution logos">
+                    <img src="{{ url_for('static', filename='img/svcc-logo.png') }}" alt="St. Vincent's College Inc. logo" class="about-hero-logo">
+                    <img src="{{ url_for('static', filename='img/csd-logo.png') }}" alt="Computer Studies Department logo" class="about-hero-logo about-hero-logo--framed">
+                </div>
+                <div>
+                    <p class="about-kicker">Computer Studies Department</p>
+                    <h1>CSD FARS</h1>
+                    <p class="about-subtitle">Facial Attendance Recognition System</p>
+                </div>
+            </div>
+            <div>
+                <p class="about-summary">
+                    A classroom attendance support system developed for the Computer Studies
+                    Department of St. Vincent's College Inc.
+                </p>
+                <div class="about-actions">
+                    {% if session.get('user_id') %}
+                    <a href="{{ url_for('dashboard_routes.dashboard') }}" class="btn btn--primary">Back to Dashboard</a>
+                    {% else %}
+                    <a href="{{ url_for('auth.login') }}" class="btn btn--primary">Sign In</a>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <section class="about-grid" aria-label="System information and credits">
+            <article class="card">
+                <h2 class="card__title">Institution</h2>
+                <dl class="about-details">
+                    <div>
+                        <dt>School</dt>
+                        <dd>St. Vincent's College Inc.</dd>
+                    </div>
+                    <div>
+                        <dt>Department</dt>
+                        <dd>Computer Studies Department</dd>
+                    </div>
+                    <div>
+                        <dt>Adviser</dt>
+                        <dd class="about-adviser">
+                            <img src="{{ url_for('static', filename='img/leo-marcha.jpg') }}" alt="Sir Leo Marcha, adviser" width="96" height="101" loading="lazy">
+                            <span>Sir Leo Marcha</span>
+                        </dd>
+                    </div>
+                </dl>
+            </article>
+
+            <article class="card">
+                <h2 class="card__title">Development credits</h2>
+                <ul class="about-team">
+                    <li><img src="{{ url_for('static', filename='img/jemavie-saile.png') }}" alt="Jemavie C. Saile" width="80" height="96" loading="lazy"><span>Jemavie C. Saile</span></li>
+                    <li><img src="{{ url_for('static', filename='img/alicia-tabiliran.png') }}" alt="Alicia Thrisha H. Tabiliran" width="80" height="96" loading="lazy"><span>Alicia Thrisha H. Tabiliran</span></li>
+                    <li><img src="{{ url_for('static', filename='img/arnold-pabatang-jr.png') }}" alt="Arnold M. Pabatang Jr." width="80" height="96" loading="lazy"><span>Arnold M. Pabatang Jr.</span></li>
+                </ul>
+            </article>
+
+            <article class="card about-card-wide">
+                <h2 class="card__title">Attendance management</h2>
+                <p class="about-copy">
+                    CSD FARS helps authorized school personnel manage student attendance
+                    through class rosters, assigned classroom cameras, live attendance
+                    sessions, recorded corrections, and attendance reports and exports.
+                </p>
+            </article>
+
+            <article class="card about-card-wide">
+                <h2 class="card__title">Privacy and responsible use</h2>
+                <p class="about-copy">CSD FARS supports authorized school attendance work. It handles student identification and enrollment details, attendance results, staff accounts, and records of attendance corrections. Where facial attendance is used, recognition data supports identifying eligible students during attendance.</p>
+                <h3>Protect school information</h3>
+                <p class="about-copy">Use only your own account and access information needed for your assigned duties. Keep passwords, student information, display links and exported reports private. Do not copy, share or change records without authorization. Sign out on shared devices and clear the student display when it is no longer needed.</p>
+                <h3>Consent and accurate records</h3>
+                <p class="about-copy">Student biometric consent is separate from the staff sign-in acknowledgment. A staff acknowledgment does not provide consent on a student's behalf. Camera recognition can be interrupted or need review; an unrecorded result must not be assumed to mean a student was absent. Authorized corrections retain a record of who made the change and why.</p>
+                <h3>Questions or concerns</h3>
+                <p class="about-copy">Ask the teacher about an attendance discrepancy. Contact the Dean or designated school support personnel about account access, suspected unauthorized use or privacy concerns. Do not include passwords, face data or private camera connection details in a support message.</p>
+                <p class="about-copy">This public page provides information only. It does not expose student or account records, replace the school's approved privacy notices, or certify legal compliance. Access inside the system remains subject to each user's permissions.</p>
+            </article>
+        </section>
+    </div>
+{% endblock %}

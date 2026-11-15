@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Network -- CSD FARS{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Network</h1>
+    <p>See this server's connections and devices observed by CSD or Windows.</p>
+</div>
+<div class="network-toolbar">
+    <button type="button" class="btn btn--secondary" id="network-refresh">Refresh now</button>
+    <label><input type="checkbox" id="network-auto" checked> Refresh every 10 seconds</label>
+    <span id="network-updated">Waiting for readings</span>
+</div>
+<p id="network-status" role="status" aria-live="polite">Loading network observations.</p>
+<noscript><p>Enable JavaScript to load network observations. Setup Center and Cameras remain available from the menu.</p></noscript>
+
+<section class="card network-card" aria-labelledby="network-server-title">
+    <h2 id="network-server-title">Server &amp; setup</h2>
+    <dl class="network-summary">
+        <div><dt>Current launch</dt><dd id="network-mode">--</dd></div>
+        <div><dt>Address for other laptops</dt><dd id="network-address">--</dd></div>
+        <div><dt>This browser's response time</dt><dd id="network-response">--</dd></div>
+    </dl>
+    <p id="network-mode-help">Waiting for the server's launch information.</p>
+    <p id="network-address-warning" class="network-warning" hidden></p>
+    <div class="network-actions">
+        {% if has_permission('manage_deployment') %}<a class="btn btn--primary" href="{{ url_for('settings.system_setup') }}">Set up sharing &amp; connect a laptop</a>{% endif %}
+        <a class="btn btn--secondary" href="{{ url_for('manage_cameras') }}">Configure cameras</a>
+        <a class="btn btn--secondary" href="{{ url_for('diagnostics.diagnostics_index') }}">Camera capacity &amp; resources</a>
+    </div>
+    <details>
+        <summary>How to connect the system</summary>
+        <ol>
+            <li>Connect the server, cameras and browser laptops to the same intended router or switch network.</li>
+            <li>Use Setup Center to choose shared access and follow setup on the server. Reserve its address in your router so the connection kit stays valid.</li>
+            <li>Give each joining laptop the server's browser connection kit, then sign in with an account from this server.</li>
+        </ol>
+        <p>A Dean manages sharing. Windows address, certificate and firewall changes are completed on the server through setup. Switch ports and power capacity require the switch's own management tools.</p>
+    </details>
+</section>
+
+<section class="card network-card" aria-labelledby="network-interfaces-title">
+    <h2 id="network-interfaces-title">Server connections</h2>
+    <p>IPv4 adapters reported by this computer. Traffic includes other applications. Link speed is the adapter's reported connection speed, not a tested camera limit.</p>
+    <p id="network-interface-note">Waiting for adapter readings.</p>
+    <p id="network-adapter-guidance">Waiting to compare the server's connected IPv4 adapters.</p>
+    <details>
+        <summary>Using Wi-Fi internet and a camera LAN together</summary>
+        <p>Wi-Fi internet and a wired camera connection can work at the same time. Windows chooses the route for camera video. The adapter selected during camera search only limits discovery; it does not select the connection used for saved-camera video or attendance.</p>
+        <p>If a camera works only after Wi-Fi is disconnected, ask the installer to check the server's adapter address ranges and routes. Separate networks with overlapping IPv4 ranges may need distinct address ranges or an appropriate route. Changing adapter priority alone may disrupt internet access and may not resolve the overlap.</p>
+        <p>This page compares reported adapter addresses only. It does not test a camera, identify its selected route, or change Wi-Fi, routes or firewall settings.</p>
+    </details>
+    <div id="network-interfaces" class="network-device-grid"></div>
+    <p id="network-route-note">Waiting for gateway readings.</p>
+</section>
+
+<section class="card network-card" aria-labelledby="network-clients-title">
+    <h2 id="network-clients-title">Recent CSD clients</h2>
+    <p>Addresses that made a signed-in request during the last 10 minutes, up to 128 entries. An address may represent several browsers or devices; it is not a person or a confirmed online device. This list clears when the server restarts.</p>
+    <p id="network-client-note">Waiting for CSD activity.</p>
+    <div id="network-clients" class="network-device-grid"></div>
+</section>
+
+<section class="card network-card" aria-labelledby="network-cameras-title">
+    <h2 id="network-cameras-title">Configured cameras</h2>
+    <p>Saved camera checks only. Opening this page does not start video or run recognition.</p>
+    <p id="network-camera-note">Waiting for camera records.</p>
+    <div id="network-cameras" class="network-device-grid"></div>
+</section>
+
+<section class="card network-card" aria-labelledby="network-neighbors-title">
+    <h2 id="network-neighbors-title">Devices remembered by Windows</h2>
+    <p>The server's IPv4 neighbor cache, refreshed at most every 30 seconds. This is an incomplete list: devices may remain here after disconnecting, and some connected devices may be missing.</p>
+    <p id="network-neighbor-note">Waiting for Windows observations.</p>
+    <div id="network-neighbors" class="network-device-grid"></div>
+    <details>
+        <summary>What do the device states mean?</summary>
+        <p><strong>Reachable:</strong> Windows recently confirmed reachability. <strong>Stale:</strong> a remembered address without recent confirmation. <strong>Delay / Probe:</strong> Windows is checking. <strong>Incomplete / Unreachable:</strong> address resolution or reachability is not established. <strong>Permanent:</strong> a fixed entry; this does not confirm a live device.</p>
+        <p>For the router's full lease list or a managed switch's ports, use its own device view. CSD does not currently read those management systems.</p>
+    </details>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/network.js', v='20260930-adapter-guidance') }}"></script>{% endblock %}

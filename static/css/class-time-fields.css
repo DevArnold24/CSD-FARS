@@ -1,0 +1,13 @@
+.class-times { margin-block: var(--space-md); }
+.class-time-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); }
+.class-time-field { min-width: 0; padding: 0; margin: 0; border: 0; }
+.class-time-field legend { margin-bottom: var(--space-sm); font-weight: var(--font-weight-medium); }
+.class-time-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-sm); }
+.class-times [hidden] { display: none; }
+.class-time-field label { display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.class-time-field select, .class-time-field input { width: 100%; min-width: 0; padding: var(--space-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-input); color: var(--color-text-primary); font: inherit; }
+.class-time-field [aria-invalid="true"] { border-color: var(--color-error); }
+.class-time-error { color: var(--color-error); font-size: var(--font-size-sm); margin-top: var(--space-xs); }
+.class-time-summary { margin-top: var(--space-sm); font-weight: var(--font-weight-medium); }
+@media (max-width: 720px) { .class-time-pair { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 420px) { #main-content .class-time-field select { padding-inline: 4px; } }

@@ -1,0 +1,13 @@
+{%- macro schedule_time(value) -%}
+    {%- set text = (value or '')|string|trim -%}
+    {%- set parts = text.split(':') -%}
+    {%- if parts|length in [2, 3] and parts[0].isdigit() and parts[1].isdigit()
+        and 0 <= parts[0]|int <= 23 and 0 <= parts[1]|int <= 59
+        and (parts|length == 2 or (parts[2].isdigit() and 0 <= parts[2]|int <= 59)) -%}
+        {{- '%d:%02d'|format(parts[0]|int % 12 or 12, parts[1]|int) -}}
+        {%- if parts|length == 3 and parts[2]|int != 0 -%}:{{ '%02d'|format(parts[2]|int) }}{%- endif -%}
+        {{- ' AM' if parts[0]|int < 12 else ' PM' -}}
+    {%- elif text -%}Time unavailable
+    {%- else -%}Time not set
+    {%- endif -%}
+{%- endmacro -%}

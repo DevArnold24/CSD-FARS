@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Student Directory - CSD FARS{% endblock %}
+
+{% block content %}
+<style>
+.student-directory-row {
+    border-bottom: 1px solid var(--color-border);
+    transition: all 0.2s ease-in-out;
+}
+.student-directory-row:hover {
+    background-color: var(--color-bg-input) !important;
+    transform: translateX(4px);
+    box-shadow: -2px 0 0 var(--color-primary);
+}
+</style>
+
+<div class="header">
+    <h2>Student Directory</h2>
+    <p class="text-muted">View registered students by academic and biometric status{% if has_permission('manage_rosters') %}, roster{% endif %}{% if has_permission('view_attendance_reports') %}, and attendance{% endif %}.</p>
+</div>
+
+<div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); margin-top: var(--space-lg);">
+    <div class="grid responsive-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-md);">
+        <div class="form-group">
+            <label for="directory-q" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Search</label>
+            <input id="directory-q" type="search" maxlength="120" placeholder="Name or student ID"
+                   style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+        </div>
+
+        <div class="form-group">
+            <label for="directory-program" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Program</label>
+            <select id="directory-program" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All Programs</option>
+                {% for program in programs %}
+                <option value="{{ program.id }}">{{ program.name }}{% if not program.is_active %} (Inactive program){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="directory-year" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Year Level</label>
+            <select id="directory-year" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All Years</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+                <option value="5th Year">5th Year</option>
+                <option value="6th Year">6th Year</option>
+                <option value="Irregular">Irregular</option>
+            </select>
+        </div>
+
+        {% if has_permission('manage_rosters') %}
+        <div class="form-group">
+            <label for="directory-class" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Class</label>
+            <select id="directory-class" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All Classes</option>
+                {% for cls in classes %}
+                <option value="{{ cls.id }}">{{ cls.class_code }} - {{ cls.course_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grid responsive-grid" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); margin-top: var(--space-md);">
+        <div class="form-group">
+            <label for="directory-biometric" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Biometric Status</label>
+            <select id="directory-biometric" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All</option>
+                <option value="ready">Ready</option>
+                <option value="needs_attention">Needs Setup</option>
+                <option value="consent_missing">Consent Missing</option>
+                <option value="embedding_missing">Embedding Missing</option>
+            </select>
+        </div>
+
+        {% if has_permission('manage_rosters') %}
+        <div class="form-group">
+            <label for="directory-roster" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Roster Status</label>
+            <select id="directory-roster" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All</option>
+                <option value="enrolled">In Class</option>
+                <option value="unenrolled">Not In Class</option>
+            </select>
+        </div>
+        {% endif %}
+
+        {% if has_permission('view_attendance_reports') %}
+        <div class="form-group">
+            <label for="directory-attendance" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Attendance Status</label>
+            <select id="directory-attendance" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All</option>
+                <option value="seen">Has Attendance</option>
+                <option value="never">No Attendance Yet</option>
+            </select>
+        </div>
+        {% endif %}
+    </div>
+    <div style="display:flex; flex-wrap:wrap; align-items:end; gap:var(--space-md); margin-top:var(--space-md);">
+        {% if has_permission('manage_student_status') %}
+        <div class="form-group">
+            <label class="form-label" for="directory-status">Student status</label>
+            <select id="directory-status" class="form-select">
+                <option value="active">Active students</option>
+                <option value="inactive">Deactivated students</option>
+                <option value="all">Active and deactivated</option>
+            </select>
+        </div>
+        {% endif %}
+        <button id="directory-reset" class="btn btn--secondary" type="button">Clear Filters</button>
+    </div>
+</div>
+
+<p class="text-muted" style="margin-top:var(--space-md);">Counts cover all matching students.</p>
+{% set summary_items = [('total', 'Total'), ('ready', 'Ready'), ('needs_setup', 'Needs Setup')] %}
+{% if has_permission('manage_rosters') %}{% set summary_items = summary_items + [('unenrolled', 'Not In Class')] %}{% endif %}
+{% if has_permission('view_attendance_reports') %}{% set summary_items = summary_items + [('never_attended', 'No Attendance')] %}{% endif %}
+<div class="grid responsive-grid" style="display: grid; grid-template-columns: repeat({{ summary_items|length }}, minmax(0, 1fr)); gap: var(--space-md); margin-top: var(--space-lg);">
+    {% for key, label in summary_items %}
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-md); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">{{ label }}</div>
+        <div id="summary-{{ key }}" style="font-size: 1.5rem; font-weight: var(--font-weight-semibold); margin-top: var(--space-xs);">--</div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); margin-top: var(--space-lg);">
+    <p id="directory-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+    <button id="directory-retry" class="btn btn--secondary" type="button" hidden>Retry Loading</button>
+    <nav aria-label="Student directory pages" style="display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-md); margin-bottom:var(--space-md);">
+        <button id="directory-previous" class="btn btn--secondary" type="button" disabled>Previous</button>
+        <span id="directory-page-status" role="status" aria-live="polite">Loading students...</span>
+        <button id="directory-next" class="btn btn--secondary" type="button" disabled>Next</button>
+    </nav>
+    <div class="responsive-table-region" role="region" aria-label="Scrollable student directory" tabindex="0" style="overflow-x: auto;">
+        <table aria-label="Student directory" style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+                <tr style="border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary);">
+                    <th style="padding: var(--space-sm) 0;">Student ID</th>
+                    <th style="padding: var(--space-sm) 0;">Name</th>
+                    <th style="padding: var(--space-sm) 0;">Program</th>
+                    <th style="padding: var(--space-sm) 0;">Year</th>
+                    <th style="padding: var(--space-sm) 0;">Biometric</th>
+                    {% if has_permission('manage_student_status') %}<th style="padding:var(--space-sm) 0;">Status</th>{% endif %}
+                    {% if has_permission('manage_rosters') %}<th style="padding: var(--space-sm) 0;">Classes</th>{% endif %}
+                    {% if has_permission('view_attendance_reports') %}<th style="padding: var(--space-sm) 0;">Latest Attendance (institution time)</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody id="directory-body">
+                <tr>
+                    <td colspan="{{ 5 + (1 if has_permission('manage_rosters') else 0) + (1 if has_permission('view_attendance_reports') else 0) + (1 if has_permission('manage_student_status') else 0) }}" style="padding: var(--space-md) 0; color: var(--color-text-muted); text-align: center;">Loading students...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/student_directory.js') }}"></script>
+{% endblock %}

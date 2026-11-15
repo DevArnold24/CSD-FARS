@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Office Admin -- CSD FARS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Office Admin Dashboard</h1>
+</div>
+
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">Student registration</h2>
+    </div>
+    <div class="card__body">
+        <p>Register students, manage their face enrollment, and review registration requests from teachers.</p>
+        <div style="margin-top: 1rem;">
+            <a href="{{ url_for('students.student_registration') }}" class="btn btn--primary">Register Student</a>
+            <a href="{{ url_for('students.student_approvals') }}" class="btn btn--secondary">Review Pending Requests</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

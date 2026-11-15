@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CSD FARS: Facial Attendance Recognition System for college classroom attendance.">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}CSD FARS{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    {% block body %}
+    <button type="button" class="sidebar-toggle" aria-controls="app-sidebar" aria-expanded="false">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span>Menu</span>
+    </button>
+    <button type="button" class="sidebar-backdrop" aria-label="Close navigation" aria-hidden="true" tabindex="-1"></button>
+    <div class="app-shell">
+        {# --- Sidebar Navigation --- #}
+        <aside class="sidebar" id="app-sidebar">
+            <div class="sidebar__brand">
+                <div class="brand-lockup">
+                    <div class="brand-logos" aria-hidden="true">
+                        <img src="{{ url_for('static', filename='img/svcc-logo.png') }}" alt="" class="brand-logo">
+                        <img src="{{ url_for('static', filename='img/csd-logo.png') }}" alt="" class="brand-logo">
+                    </div>
+                    <div class="brand-copy">
+                        <h1>CSD FARS</h1>
+                        <span>Facial Attendance Recognition System</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="sidebar__nav" aria-label="Primary navigation">
+                <ul>
+                    {% if session.get('role') in roles %}
+                    <li>
+                        <a href="{{ url_for('dashboard_routes.dashboard') }}"
+                           {% if request.endpoint == 'dashboard_routes.dashboard' %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint == 'dashboard_routes.dashboard' %}sidebar__nav-item--active{% endif %}">
+                            Dashboard
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('manage_classes') or has_permission('view_attendance_reports') %}
+                    <li class="sidebar__section-label">Classes and attendance</li>
+                    {% if has_permission('manage_classes') %}
+                    <li>
+                        <a href="{{ url_for('classes.manage_classes') }}"
+                           {% if request.endpoint and 'class' in request.endpoint %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and 'class' in request.endpoint %}sidebar__nav-item--active{% endif %}">
+                            Classes
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('view_attendance_reports') %}
+                    <li>
+                        <a href="{{ url_for('reports.reports_index') }}"
+                           {% if request.endpoint and request.endpoint.endswith('reports_index') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('reports_index') %}sidebar__nav-item--active{% endif %}">
+                            Reports
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if (has_permission('submit_student_registration') or has_permission('register_students_direct')) or (session.get('role') == 'Teacher') or (has_permission('view_student_directory')) or (has_permission('approve_student_registrations')) %}
+                    <li class="sidebar__section-label">Students</li>
+                    {% if has_permission('submit_student_registration') or has_permission('register_students_direct') %}
+                    <li>
+                        <a href="{{ url_for('students.student_registration') }}"
+                           {% if request.endpoint and request.endpoint.endswith('student_registration') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('student_registration') %}sidebar__nav-item--active{% endif %}">
+                            Student Registration
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if session.get('role') == 'Teacher' %}
+                    <li>
+                        <a href="{{ url_for('students.my_registration_requests') }}"
+                           {% if request.endpoint == 'students.my_registration_requests' %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint == 'students.my_registration_requests' %}sidebar__nav-item--active{% endif %}">
+                            My Registration Requests
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('view_student_directory') %}
+                    <li>
+                        <a href="{{ url_for('students.student_directory') }}"
+                           {% if request.endpoint in ('students.student_directory', 'students.student_profile') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint in ('students.student_directory', 'students.student_profile') %}sidebar__nav-item--active{% endif %}">
+                            Student Directory
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('approve_student_registrations') %}
+                    <li>
+                        <a href="{{ url_for('students.student_approvals') }}"
+                           {% if request.endpoint and request.endpoint.split('.')[-1] in ('student_approvals', 'student_approval_history') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.split('.')[-1] in ('student_approvals', 'student_approval_history') %}sidebar__nav-item--active{% endif %}">
+                            Student Approvals
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if (has_permission('manage_programs')) or (has_permission('manage_attendance_settings')) or (has_permission('manage_locations')) or (has_permission('manage_users')) %}
+                    <li class="sidebar__section-label">Administration</li>
+                    {% if has_permission('manage_programs') %}
+                    <li>
+                        <a href="{{ url_for('manage_programs') }}"
+                           {% if request.endpoint and request.endpoint.endswith('manage_programs') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('manage_programs') %}sidebar__nav-item--active{% endif %}">
+                            Programs
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('manage_attendance_settings') %}
+                    <li><a href="{{ url_for('settings.attendance_settings_page') }}"
+                        {% if request.endpoint == 'settings.attendance_settings_page' %}aria-current="page"{% endif %}
+                        class="sidebar__nav-item {% if request.endpoint == 'settings.attendance_settings_page' %}sidebar__nav-item--active{% endif %}">Attendance Settings</a></li>
+                    {% endif %}
+                    {% if has_permission('manage_locations') %}
+                    <li>
+                        <a href="{{ url_for('settings.manage_locations') }}"
+                           {% if request.endpoint == 'settings.manage_locations' %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint == 'settings.manage_locations' %}sidebar__nav-item--active{% endif %}">
+                            Locations
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('manage_users') %}
+                    <li>
+                        <a href="{{ url_for('admin.admin_users') }}"
+                           {% if request.endpoint and request.endpoint.endswith('admin_users') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('admin_users') %}sidebar__nav-item--active{% endif %}">
+                            User Management
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if (has_permission('manage_deployment')) or (has_permission('manage_cameras')) or (has_permission('view_diagnostics')) or (has_permission('run_recognition_diagnostics')) or (has_permission('view_technical_history') or has_permission('manage_backups')) %}
+                    <li class="sidebar__section-label">Technical tools</li>
+                    {% if has_permission('manage_deployment') %}
+                    <li>
+                        <a href="{{ url_for('settings.system_setup') }}"
+                           {% if request.endpoint == 'settings.system_setup' %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint == 'settings.system_setup' %}sidebar__nav-item--active{% endif %}">
+                            Setup Center
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('manage_cameras') %}
+                    <li>
+                        <a href="{{ url_for('manage_cameras') }}"
+                           {% if request.endpoint and request.endpoint.endswith('manage_cameras') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('manage_cameras') %}sidebar__nav-item--active{% endif %}">
+                            Cameras
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('view_diagnostics') %}
+                    <li>
+                        <a href="{{ url_for('diagnostics.diagnostics_index') }}"
+                           {% if request.endpoint and request.endpoint.endswith('diagnostics_index') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('diagnostics_index') %}sidebar__nav-item--active{% endif %}">
+                            System Diagnostics
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('diagnostics.network_index') }}"
+                           {% if request.endpoint == 'diagnostics.network_index' %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint == 'diagnostics.network_index' %}sidebar__nav-item--active{% endif %}">
+                            Network
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('run_recognition_diagnostics') %}
+                    <li>
+                        <a href="{{ url_for('diagnostics.recognition_sandbox_dashboard') }}"
+                           {% if request.endpoint and request.endpoint.endswith('recognition_sandbox_dashboard') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('recognition_sandbox_dashboard') %}sidebar__nav-item--active{% endif %}">
+                            Recognition Tuner
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if has_permission('view_technical_history') or has_permission('manage_backups') %}
+                    <li>
+                        <a href="{{ url_for('diagnostics.system_operations') }}"
+                           {% if request.endpoint and request.endpoint.endswith('system_operations') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('system_operations') %}sidebar__nav-item--active{% endif %}">
+                            System Operations
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if (session.get('role') == 'Dean') %}
+                    <li class="sidebar__section-label">About</li>
+                    {% if session.get('role') == 'Dean' %}
+                    <li>
+                        <a href="{{ url_for('about') }}"
+                           {% if request.endpoint and request.endpoint.endswith('about') %}aria-current="page"{% endif %}
+                           class="sidebar__nav-item {% if request.endpoint and request.endpoint.endswith('about') %}sidebar__nav-item--active{% endif %}">
+                            About CSD FARS
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+
+                </ul>
+            </nav>
+
+            <div class="sidebar__footer">
+                <div class="sidebar__user">
+                    <div class="sidebar__user-avatar">
+                        {{ session.get('username', '?')[0]|upper }}
+                    </div>
+                    <div class="sidebar__user-info">
+                        <div class="sidebar__user-name">{{ session.get('username', 'Guest') }}</div>
+                        <div class="sidebar__user-role">{{ session.get('role', '') | replace('_', ' ') }}</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn--secondary btn--block mt-md">
+                    Log Out
+                </a>
+            </div>
+        </aside>
+
+        {# --- Main Content Area --- #}
+        <main class="main-content" id="main-content" tabindex="-1">
+            {# Flash Messages #}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flash-messages" aria-live="polite" aria-atomic="true">
+                {% for category, message in messages %}
+                <div class="flash flash--{{ category }}" role="{% if category in ('error', 'warning') %}alert{% else %}status{% endif %}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% endblock %}
+
+    <script src="{{ url_for('static', filename='js/auth-response.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/action-lock.js') }}"></script>
+    {% block scripts %}{% endblock %}
+    {% include 'global_modals.html' %}
+    <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/modals.js') }}"></script>
+</body>
+</html>

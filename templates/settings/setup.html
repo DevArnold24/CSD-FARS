@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Setup Center - CSD FARS{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="setup-center">
+    <div class="page-header">
+        <h1 class="page-header__title">Setup Center</h1>
+        <p class="page-header__subtitle">Choose how this installation starts and help other laptops connect to it.</p>
+    </div>
+
+    <section class="setup-overview" aria-label="Current and next-launch modes">
+        <div class="card setup-state-card">
+            <h2>Running now</h2>
+            {% if setup.runtime_mode == 'local' %}
+            <p class="setup-state-value">Local only</p>
+            <p>This server is running for use on its own computer.</p>
+            {% elif setup.runtime_mode == 'lan' %}
+            <p class="setup-state-value">Shared LAN mode</p>
+            <p>This server was launched in LAN mode. Connection details are below.</p>
+            {% else %}
+            <p class="setup-state-value">Launch mode not verified</p>
+            <p>The supported launcher has not verified this session's mode. This page does not confirm that LAN access is ready.</p>
+            <p>Use <code>START_HERE.cmd</code> from a complete Windows installation to apply these choices. Saving a choice here does not install required software or enable LAN access.</p>
+            {% endif %}
+        </div>
+        <div class="card setup-state-card">
+            <h2>Saved for the next interactive launch</h2>
+            <p class="setup-state-value" id="setup-saved-choice">
+                {% if setup.preferred_mode == 'local' %}Local only
+                {% elif setup.preferred_mode == 'lan' %}Shared LAN
+                {% else %}No saved choice{% endif %}
+            </p>
+            <p>This is a preference for <code>START_HERE.cmd</code>. Saving it does not change the mode running now.</p>
+        </div>
+    </section>
+
+    {% if setup.preference_error %}
+    <div class="flash flash--error setup-message" id="setup-preference-error" role="alert">
+        <h2>Launch preference needs attention</h2>
+        <p>{{ setup.preference_error }}</p>
+    </div>
+    {% endif %}
+
+    <div class="setup-layout">
+        <section class="card setup-preference" aria-labelledby="setup-preference-title">
+            <h2 id="setup-preference-title">Choose how to open this system</h2>
+            <p id="setup-choice-help">Both modes use this installation's existing database and accounts. You do not need another installation to switch modes.</p>
+
+            <form method="post" action="{{ url_for('settings.save_deployment_preference') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% set selected_mode = setup_selected_mode|default(none) or setup.preferred_mode %}
+                {% if setup_save_error %}
+                <div class="flash flash--error setup-message" id="setup-save-error" role="alert">
+                    <p>{{ setup_save_error }}</p>
+                    {% if setup_selected_mode %}
+                    <p>Your choice is still selected below. The saved choice shown above has not changed.</p>
+                    {% else %}
+                    <p>Choose one of the modes below and try again.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <fieldset class="setup-mode-options" aria-describedby="setup-choice-help setup-save-help{% if setup.preference_error %} setup-preference-error{% endif %}{% if setup_save_error %} setup-save-error{% endif %}">
+                    <legend class="visually-hidden">Mode for the next interactive launch</legend>
+                    <label class="setup-mode-card" for="setup-mode-local">
+                        <input type="radio" id="setup-mode-local" name="mode" value="local" required
+                               aria-labelledby="setup-mode-local-title" aria-describedby="setup-mode-local-help"
+                               {% if selected_mode != 'lan' %}checked{% endif %}>
+                        <span class="setup-mode-body">
+                            <span class="setup-mode-title" id="setup-mode-local-title">Local only</span>
+                            <span class="setup-mode-description" id="setup-mode-local-help">Use CSD Attendance on the server computer. Other laptops will not connect through this launch.</span>
+                            <span class="setup-mode-detail">Use the system on this computer without sharing access with other laptops.</span>
+                        </span>
+                    </label>
+                    <label class="setup-mode-card" for="setup-mode-lan">
+                        <input type="radio" id="setup-mode-lan" name="mode" value="lan" required
+                               aria-labelledby="setup-mode-lan-title" aria-describedby="setup-mode-lan-help"
+                               {% if selected_mode == 'lan' %}checked{% endif %}>
+                        <span class="setup-mode-body">
+                            <span class="setup-mode-title" id="setup-mode-lan-title">Shared LAN</span>
+                            <span class="setup-mode-description" id="setup-mode-lan-help">Keep one server and let other laptops use the same system through their browsers.</span>
+                            <span class="setup-mode-detail">Requires the same trusted router and local Windows setup approvals.</span>
+                        </span>
+                    </label>
+                </fieldset>
+                <p class="setup-save-help" id="setup-save-help">Saving records your choice only. It does not restart the server, change Windows networking, or connect other devices.</p>
+                <button class="btn btn--primary" type="submit">Save next-launch choice</button>
+            </form>
+
+            <div class="setup-apply" aria-labelledby="setup-apply-title">
+                <h3 id="setup-apply-title">Apply it on the server computer</h3>
+                <ol>
+                    <li>Finish any active attendance sessions, then stop the server.</li>
+                    <li>On the computer running this installation, reopen <code>START_HERE.cmd</code> from the same installed folder.</li>
+                    <li>Select the mode button you want in the setup window. For Shared LAN, follow the guided Windows network, certificate-trust, and firewall approvals. Closing the window starts nothing.</li>
+                </ol>
+                <p>You may be viewing this page from another laptop. These launch steps must be performed on the server computer.</p>
+            </div>
+
+            <aside class="setup-notice" aria-labelledby="setup-autostart-title">
+                <h3 id="setup-autostart-title">Automatic startup is a separate setting</h3>
+                <p>This saved choice applies only when someone opens the interactive <code>START_HERE.cmd</code> menu. It does not change a scheduled LAN task.</p>
+                <p>If you are switching to Local only, use the automatic-startup manager on the server computer to <strong>Stop</strong> and <strong>Disable</strong> any existing LAN task. Saving Local only here does not disable it.</p>
+            </aside>
+        </section>
+
+        <section class="card setup-connect" aria-labelledby="setup-connect-title">
+            <h2 id="setup-connect-title">Connect other Windows laptops</h2>
+            <p>Browser laptops join this server. They do not need the full application installed and should not create another independent database.</p>
+
+            {% if setup.runtime_mode == 'local' %}
+            <p class="setup-inline-status">The current launch is Local only. Apply Shared LAN on the server before expecting other laptops to connect.</p>
+            {% elif setup.runtime_mode != 'lan' %}
+            <p class="setup-inline-status">LAN availability is not confirmed for this launch. Complete the supported Shared LAN setup on the server first.</p>
+            {% endif %}
+
+            {% if setup.public_url %}
+            <div class="setup-address">
+                <h3>LAN address</h3>
+                <a href="{{ setup.public_url }}" target="_blank" rel="noopener noreferrer">{{ setup.public_url }}<span class="visually-hidden"> (opens in a new tab)</span></a>
+                <p>Use the connection kit once to establish certificate trust on a new Windows account. Then bookmark this address in the browser opened by the kit for later visits.</p>
+            </div>
+            {% endif %}
+
+            {% if setup.client_kit_available %}
+            <a class="btn btn--primary setup-kit-download" href="{{ url_for('settings.download_lan_client_kit') }}">Download Windows browser connection kit</a>
+            {% else %}
+            <div class="setup-kit-unavailable" role="status" aria-live="polite">
+                <h3>Connection kit unavailable</h3>
+                <p>{{ setup.client_kit_reason or 'Complete and verify Shared LAN setup on the server before downloading a connection kit.' }}</p>
+            </div>
+            {% endif %}
+
+            <ol class="setup-connect-steps">
+                <li>Connect the server and the other laptop to the same trusted router, using Ethernet or its Wi-Fi.</li>
+                <li>Download the kit when available, extract it, and transfer the complete kit to the other laptop.</li>
+                <li>On that laptop, double-click <code>CONNECT_TO_CSD.cmd</code>. Verify the server's certificate details with the system owner before accepting trust.</li>
+                <li>Sign in with an account from this server. Trusted HTTPS is also needed to use the laptop's webcam for enrollment.</li>
+            </ol>
+            <p class="setup-footnote">For daily LAN startup, double-click <code>START_CSD_LAN_SERVER.cmd</code> on the server. Completed setup steps are reused.</p>
+            <p class="setup-footnote">The server must stay powered on and awake. The connection kit does not contain the application database or create user accounts.</p>
+            <p class="setup-footnote">The guided installer and connection kit currently support Windows. Setup on macOS, Linux, phones, and tablets has not yet been validated.</p>
+
+            <details class="setup-troubleshooting">
+                <summary>If another laptop cannot connect</summary>
+                <p>A changed server address, a different router, or an old connection kit can prevent access. Ask the system owner or technician to check the server's LAN configuration and provide a freshly verified kit.</p>
+                <p>Do not bypass certificate warnings. You can choose Local only and reopen this installation on the server while LAN setup is repaired. If a scheduled LAN task exists, stop and disable it separately.</p>
+            </details>
+        </section>
+    </div>
+
+    <section class="setup-next" aria-labelledby="setup-next-title">
+        <div>
+            <h2 id="setup-next-title">Continue setting up your installation</h2>
+            <p>Configure classroom cameras and prepare backups before using the system for daily attendance.</p>
+        </div>
+        <div class="setup-next-links">
+            {% if has_permission('view_diagnostics') %}<a class="btn btn--secondary" href="{{ url_for('diagnostics.network_index') }}">Network &amp; devices</a>{% endif %}
+            {% if has_permission('manage_cameras') %}<a class="btn btn--secondary" href="{{ url_for('manage_cameras') }}">Cameras</a>{% endif %}
+            {% if has_permission('manage_backups') or has_permission('view_technical_history') %}<a class="btn btn--secondary" href="{{ url_for('diagnostics.system_operations') }}">System Operations</a>{% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}

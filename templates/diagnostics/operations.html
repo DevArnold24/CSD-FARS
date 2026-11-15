@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}System Operations -- CSD FARS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">System Operations</h1>
+    <p class="page-header__subtitle">Technical event history{% if can_manage_backups %} and encrypted database backups{% endif %}</p>
+</div>
+
+{% if can_manage_backups %}
+<section class="card" style="margin-bottom: var(--space-xl);">
+    <div class="card__header operations-backup-header" style="display:flex; justify-content:space-between; align-items:center; gap:var(--space-md);">
+        <div>
+            <h2 class="card__title">Encrypted Backups</h2>
+            <p class="text-muted">Create and verify database-only archives. Restore is a staged maintenance operation and never overwrites the active database.</p>
+        </div>
+        <form method="post" action="{{ url_for('diagnostics.create_system_backup') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn--primary">Create Backup</button>
+        </form>
+    </div>
+    <div class="card__body">
+        {% if backup_error %}<p class="flash flash--error" role="alert">{{ backup_error }}</p>{% endif %}
+        <table class="operations-backup-table" role="table" aria-label="Encrypted database backups">
+            <thead role="rowgroup"><tr role="row"><th id="backup-col-archive" role="columnheader" scope="col" style="text-align:left;">Archive</th><th id="backup-col-size" role="columnheader" scope="col" style="text-align:left;">Size</th><th id="backup-col-actions" role="columnheader" scope="col" style="text-align:right;">Actions</th></tr></thead>
+            <tbody role="rowgroup">
+            {% for archive in archives %}
+                <tr role="row">
+                    <td role="cell" headers="backup-col-archive" data-label="Archive"><div class="operations-cell-value">{{ archive.name }}</div></td>
+                    <td role="cell" headers="backup-col-size" data-label="Size"><div class="operations-cell-value">{{ archive.size }} bytes</div></td>
+                    <td role="cell" headers="backup-col-actions" data-label="Actions" style="text-align:right;">
+                        <div class="operations-cell-value operations-backup-actions">
+                            <button type="button" class="btn btn--secondary btn--sm verify-backup" data-name="{{ archive.name }}" aria-label="Verify backup {{ archive.name }}" aria-describedby="backup-result-{{ loop.index }}">Verify</button>
+                            <a class="btn btn--secondary btn--sm" href="{{ url_for('diagnostics.download_system_backup', name=archive.name) }}" aria-label="Download backup {{ archive.name }}">Download</a>
+                        </div>
+                        <p class="backup-verification-result" id="backup-result-{{ loop.index }}" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+                    </td>
+                </tr>
+            {% else %}
+                <tr role="row"><td role="cell" colspan="3" class="text-muted operations-backup-empty">{% if backup_error %}The backup list is unavailable.{% else %}No encrypted backups have been created.{% endif %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<section class="card">
+    <div class="card__header"><h2 class="card__title">Technical Event History</h2></div>
+    <div class="card__body">
+        <form method="get" action="{{ url_for('diagnostics.system_operations') }}" style="display:flex; flex-wrap:wrap; align-items:end; gap:var(--space-md);">
+            <div>
+                <label for="history-event-type" class="form-label">Event type</label>
+                <select id="history-event-type" name="event_type" class="form-select">
+                    <option value="">All permitted events</option>
+                    {% for value, label in event_types %}<option value="{{ value }}" {% if event_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn--secondary">Apply Filter</button>
+            <a href="{{ url_for('diagnostics.system_operations') }}">View latest events</a>
+        </form>
+        {% if history_error %}<p id="history-error" class="flash flash--error" role="alert">{{ history_error }}</p>
+        {% else %}<p class="text-muted" role="status">Showing {{ events|length }} event{{ '' if events|length == 1 else 's' }}. Newest first.{% if history_older %} Use Older events to review earlier activity.{% endif %}</p>{% endif %}
+    </div>
+    <div class="card__body operations-scroll-region" role="region" aria-label="Scrollable technical event history" tabindex="0">
+        <table class="operations-event-table" aria-label="Technical event history">
+            <thead><tr><th style="text-align:left;">Institutional time</th><th style="text-align:left;">Category</th><th style="text-align:left;">Event</th><th style="text-align:left;">Severity</th><th style="text-align:left;">Device / camera</th><th style="text-align:left;">Reason / error</th><th style="text-align:left;">Actor</th>{% if can_manage_backups %}<th style="text-align:left;">Sanitized details</th>{% endif %}</tr></thead>
+            <tbody>
+            {% for event in events %}
+                <tr>
+                    <td style="white-space:nowrap;">{{ event.local_time }}</td>
+                    <td>{{ event.category }}</td>
+                    <td>{{ event.event }}</td>
+                    <td><span class="badge {% if event.severity == 'Error' %}badge--danger{% elif event.severity == 'Warning' %}badge--warning{% else %}badge--secondary{% endif %}">{{ event.severity }}</span></td>
+                    <td>{{ event.device }}</td>
+                    <td style="max-width:360px; overflow-wrap:anywhere;">{{ event.reason }}</td>
+                    <td>{{ event.actor }}</td>
+                    {% if can_manage_backups %}<td style="max-width:460px; overflow-wrap:anywhere;">{{ event.authorized_details }}</td>{% endif %}
+                </tr>
+            {% else %}
+                <tr><td colspan="{{ 8 if can_manage_backups else 7 }}" class="text-muted">{% if history_filtered or history_error %}No events match this view. Choose another event type or view latest events.{% else %}No technical events recorded yet.{% endif %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if history_newer or history_older %}
+    <nav class="card__body" aria-label="Technical history pages" style="display:flex; flex-wrap:wrap; gap:var(--space-md);">
+        {% if history_newer %}<a id="history-newer" href="{{ url_for('diagnostics.system_operations', event_type=event_type, after=history_newer) }}" class="btn btn--secondary">Newer events</a>{% endif %}
+        {% if history_older %}<a id="history-older" href="{{ url_for('diagnostics.system_operations', event_type=event_type, before=history_older) }}" class="btn btn--secondary">Older events</a>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/backup-verification.js') }}"></script>
+{% endblock %}

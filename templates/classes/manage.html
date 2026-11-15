@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% from "classes/_schedule_time.html" import schedule_time %}
+{% block title %}Classes - CSD FARS{% endblock %}
+
+{% block content %}
+{% set form_data = form_data or {} %}
+<div class="header">
+    <h2>{% if is_archived_view %}Archived Classes{% else %}Classes{% endif %}</h2>
+    <p class="text-muted">{% if is_archived_view %}Review attendance history or restore a class. Archived classes are read-only.{% elif session.get('role') == 'Teacher' %}Manage your assigned classes and rosters. The Dean creates and assigns classes. Contact the Dean if your class is missing.{% else %}Create and administer classes, schedules, rosters, and attendance history across the department.{% endif %}</p>
+    {% if session.get('role') == 'Dean' and not is_archived_view %}
+    <a href="{{ url_for('classes.create_class') }}" class="btn btn--primary mt-md">Create Class</a>
+    {% endif %}
+</div>
+
+{% include 'classes/_session_links.html' %}
+<div class="class-management-grid" style="grid-template-columns: minmax(0, 1fr);">
+    <!-- Classes List -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <div class="mobile-stack-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <h3 style="margin: 0;">{% if session.get('role') == 'Dean' %}All classes{% else %}Your Classes{% endif %}</h3>
+            <div class="mobile-action-group" style="display: flex; gap: var(--space-sm);">
+                <a href="{{ url_for('classes.manage_classes') }}" class="btn btn--sm {% if not is_archived_view %}btn--primary{% else %}btn--secondary{% endif %}">Active</a>
+                <a href="{{ url_for('classes.archived_classes') }}" class="btn btn--sm {% if is_archived_view %}btn--primary{% else %}btn--secondary{% endif %}">Archived</a>
+            </div>
+        </div>
+        
+        {% if session.get('role') == 'Dean' %}
+        <div style="margin-bottom: var(--space-md);">
+            <label for="teacherFilter" class="visually-hidden">Filter classes by teacher</label>
+            <select id="teacherFilter" 
+                   style="width: 100%; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-bg-input); color: var(--color-text-primary);"
+                   onchange="filterClasses()">
+                <option value="all">All Teachers</option>
+            </select>
+        </div>
+
+        {% endif %}
+        
+        <div id="classTableBody" class="class-list">
+            {% for c in classes %}
+            <article class="class-list-card class-row" data-teacher="{{ c.teacher_name }}">
+                <div class="class-list-card__body">
+                    <div class="class-list-card__header">
+                        <h4>{{ c.course_name }}</h4>
+                        <span class="class-list-card__code">{{ c.class_code }}</span>
+                    </div>
+                    <div class="class-list-card__meta" style="margin-top: var(--space-xs); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-sm); margin-bottom: var(--space-sm);">
+                        <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary); font-weight: 500;">Enrolled: {{ c.enrolled_count }} {{ 'student' if c.enrolled_count == 1 else 'students' }}</span>
+                    </div>
+                    <div class="class-list-card__meta">
+                        <div class="class-list-card__field">
+                            <span>Room</span>
+                            <strong>{% if c.room_code %}{{ c.room_code }}{% else %}Unassigned Room{% endif %}</strong>
+                            {% if c.room_name and c.room_name != 'Room ' ~ c.room_code %}<small>{{ c.room_name }}</small>{% endif %}
+                        </div>
+                        <div class="class-list-card__field class-list-card__field--wide">
+                            <span>Camera</span>
+                            <strong>{{ c.camera_name or 'Manual Mode / No Active CCTV' }}</strong>
+                            <small>{% if c.camera_room_code %}Room {{ c.camera_room_code }}{% else %}Room {{ c.camera_room }}{% endif %}{% if c.camera_placement %} - {{ c.camera_placement }}{% endif %}</small>
+                        </div>
+                        <div class="class-list-card__field">
+                            <span>Schedule</span>
+                            <strong>{{ c.days_of_week }}</strong>
+                            <small>{{ schedule_time(c.start_time) }} &ndash; {% if c.end_time %}{{ schedule_time(c.end_time) }}{% else %}End time not set{% endif %}</small>
+                        </div>
+                        {% if session.get('role') == 'Dean' %}
+                        <div class="class-list-card__field">
+                            <span>Teacher</span>
+                            <strong>{{ c.teacher_name }}</strong>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% with pending_schedule=c.pending_schedule %}{% include 'classes/_pending_schedule.html' %}{% endwith %}
+                </div>
+                <div class="class-list-card__actions">
+                    <a href="{{ url_for('classes.class_detail', class_id=c.id) }}" class="btn btn--primary btn--sm">View Details</a>
+                    {% if is_archived_view %}
+                    <button type="button" class="btn btn--primary btn--sm js-restore-class" data-class-id="{{ c.id }}" data-class-name="{{ c.course_name }}" data-room-id="{{ c.room_id or '' }}">Restore Class</button>
+                    <form method="POST" action="{{ url_for('classes.restore_class', class_id=c.id) }}" style="display:inline;" onsubmit="return AppModal.confirmSubmit(event, '');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn--primary btn--sm" style="display:none;" id="fallback-restore-{{ c.id }}">Restore Class</button>
+                    </form>
+                    {% else %}
+                    <a href="{{ url_for('classes.edit_class', class_id=c.id) }}" class="btn btn--secondary btn--sm">{{ 'Edit' if session.role == 'Dean' else 'Late marking' }}</a>
+                    <form method="POST" action="{{ url_for('classes.archive_class', class_id=c.id) }}" style="display:inline;" onsubmit="return AppModal.confirmSubmit(event, 'Archive this class? It will become read-only until restored.', 'Archive Class');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn--secondary btn--sm" style="color: var(--color-error); border-color: var(--color-error); background: transparent;">Archive</button>
+                    </form>
+                    <a href="{{ url_for('classes.class_enrollments', class_id=c.id) }}" class="btn btn--primary btn--sm">Manage Enrollments</a>
+                    {% endif %}
+                    <a href="{{ url_for('classes.class_session_history', class_id=c.id) }}" class="btn btn--secondary btn--sm">Attendance History</a>
+                </div>
+            </article>
+            {% else %}
+            <div class="class-list-empty">
+                <strong>{% if is_archived_view %}No archived classes{% else %}No active classes{% endif %}</strong>
+                <p>{% if is_archived_view %}Archived classes will appear here with their attendance history.{% elif session.get('role') == 'Teacher' %}No classes assigned yet. The Dean creates and assigns classes. Contact the Dean if your class is missing.{% else %}No active classes yet. Create a class and assign a teacher, or open Archived to review or restore an existing class.{% endif %}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div id="restoreModal" role="dialog" aria-modal="true" aria-labelledby="restoreModalTitle" aria-describedby="restoreModalDescription" aria-hidden="true" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(15,23,42,0.35); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: var(--space-md);">
+    <div tabindex="-1" style="background-color: var(--color-bg-card); padding: var(--space-xl); border: 1px solid var(--color-border); width: 90%; max-width: 500px; border-radius: var(--radius-lg); box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <h3 id="restoreModalTitle" style="margin: 0; font-size: var(--font-size-lg);">Restore Class</h3>
+            <button type="button" id="restoreModalClose" aria-label="Close restore class dialog" style="background: transparent; border: none; color: var(--color-text-secondary); font-size: 24px; font-weight: bold; cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+        <p id="restoreModalDescription" style="color: var(--color-text-secondary); margin-bottom: var(--space-lg); font-size: var(--font-size-sm);">
+            Restore <strong id="restoreClassName"></strong> with its existing teacher, schedule and roster. The current room is selected when available; you can choose another active room. Its camera is linked automatically.
+        </p>
+        <form id="restoreForm" method="POST" action="">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="restore_room_id" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Select Active Room</label>
+                <select id="restore_room_id" name="room_id" required style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <option value="">Select room...</option>
+                    {% for room in rooms %}
+                    <option value="{{ room.id }}">{{ room.hierarchy_display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+                <button type="button" id="restoreModalCancel" class="btn btn--secondary" style="background: transparent; border: 1px solid var(--color-border); color: var(--color-text-primary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); cursor: pointer;">Cancel</button>
+                <button type="submit" class="btn btn--primary" style="background: var(--color-accent); color: white; padding: var(--space-sm) var(--space-md); border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: var(--font-weight-medium);">Confirm & Restore</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+    const restoreModal = document.getElementById('restoreModal');
+    const restoreModalDialog = restoreModal.querySelector('[tabindex="-1"]');
+    const restoreRoomSelect = document.getElementById('restore_room_id');
+    let restoreModalReturnFocus = null;
+
+    function restoreModalFocusableElements() {
+        return Array.from(restoreModal.querySelectorAll(
+            'button:not([disabled]), select:not([disabled]), input:not([disabled]):not([type="hidden"]), [href], [tabindex]:not([tabindex="-1"])'
+        )).filter((element) => !element.hidden && element.offsetParent !== null);
+    }
+
+    function openRestoreModal(classId, className, roomId) {
+        document.getElementById('restoreClassName').innerText = className;
+        document.getElementById('restoreForm').action = '/classes/' + classId + '/restore';
+        restoreRoomSelect.value = Array.from(restoreRoomSelect.options).some(option => option.value === roomId) ? roomId : '';
+        restoreModal.style.display = 'flex';
+        restoreModal.setAttribute('aria-hidden', 'false');
+        restoreRoomSelect.focus();
+    }
+
+    function closeRestoreModal() {
+        restoreModal.style.display = 'none';
+        restoreModal.setAttribute('aria-hidden', 'true');
+        if (restoreModalReturnFocus && document.contains(restoreModalReturnFocus)) {
+            restoreModalReturnFocus.focus();
+        }
+        restoreModalReturnFocus = null;
+    }
+
+    document.querySelectorAll('.js-restore-class').forEach((button) => {
+        button.addEventListener('click', () => {
+            restoreModalReturnFocus = button;
+            openRestoreModal(button.dataset.classId, button.dataset.className, button.dataset.roomId || '');
+        });
+    });
+
+    document.getElementById('restoreModalClose').addEventListener('click', closeRestoreModal);
+    document.getElementById('restoreModalCancel').addEventListener('click', closeRestoreModal);
+    restoreModal.addEventListener('click', (event) => {
+        if (event.target === restoreModal) closeRestoreModal();
+    });
+    restoreModal.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeRestoreModal();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+
+        const focusable = restoreModalFocusableElements();
+        if (!focusable.length) {
+            event.preventDefault();
+            restoreModalDialog.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    });
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+<script src="{{ url_for('static', filename='js/manage.js') }}"></script>
+{% endblock %}

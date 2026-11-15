@@ -1,0 +1,1748 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Update Face Enrollment' if reenrollment else 'Student Registration' }} - CSD FARS{% endblock %}
+
+{% block head %}
+<script src="{{ url_for('static', filename='vendor/face-api/1.7.15/face-api.js') }}"></script>
+<style>
+#retry-webcam[hidden], #reconnect-room-camera[hidden], #enrollment-record-link[hidden] { display: none; }
+.capture-actions { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; margin-top: 12px; }
+.capture-actions > button { flex: 1 1 180px; }
+#enrollment-alert, #enrollment-submission-status { width: 100%; overflow-wrap: anywhere; }
+.registration-camera-controls { flex-wrap: wrap; }
+.registration-camera-controls > div { flex: 1 1 220px !important; min-width: 0; }
+.registration-room-controls { flex-wrap: wrap; }
+#cctv-room-select { min-width: 0; width: 100%; flex-basis: 220px !important; }
+.registration-layout > .card { min-width: 0; }
+#capture-readiness { width: 100%; padding: 14px 16px; border: 3px solid; border-radius: 10px; margin-bottom: 12px; }
+#capture-readiness-title { display: block; font-size: clamp(22px, 2vw, 30px); font-weight: 800; line-height: 1.2; }
+#capture-readiness-detail { display: block; margin-top: 5px; font-size: 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set teacher_requires_approval = session.get('role') == 'Teacher' %}
+<div class="header">
+    <h2>{% if reenrollment %}Update Face Enrollment{% elif teacher_requires_approval %}Student Registration Request{% else %}Register a student{% endif %}</h2>
+    <p class="text-muted">
+        {% if reenrollment %}
+        Capture three new poses, review them, then save to replace this student's face enrollment. Existing enrollment stays in place until the update succeeds.
+        {% elif teacher_requires_approval %}
+        Enter the student's details, take three face photos, then submit them for approval.
+        {% else %}
+        Enter the student's details, take three face photos, then review and save.
+        {% endif %}
+    </p>
+    {% if reenrollment %}
+    <p><a class="btn btn--secondary" href="{{ url_for('students.student_profile', student_id=reenrollment.id) }}">Back to Student Profile</a></p>
+    {% elif teacher_requires_approval %}
+    <p><a class="btn btn--secondary" href="{{ url_for('students.my_registration_requests') }}">My Registration Requests</a></p>
+    {% endif %}
+</div>
+
+{% if correction %}
+<section class="flash flash--info" id="registration-correction" aria-labelledby="registration-correction-title">
+    <h3 id="registration-correction-title">Correct rejected request #{{ correction.id }}</h3>
+    <p style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ correction.review_note or 'No review note was provided. Contact the Office Admin if you need clarification.' }}</p>
+    <p>Check the details below, verify consent, and capture three new poses. Your earlier request and review remain in your history.</p>
+    <a href="{{ url_for('students.my_registration_requests') }}">Cancel and return to my requests</a>
+</section>
+{% endif %}
+<input type="hidden" id="resubmit-request-id" value="{{ correction.id if correction else '' }}">
+{% if not programs and not reenrollment %}
+<p class="flash flash--warning" role="alert">Registration requires an active academic program. Ask the Dean to create or activate one, then reload this page.</p>
+{% endif %}
+
+<div class="grid responsive-grid registration-layout" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xl); margin-top: var(--space-lg);">
+    <!-- Registration Form & Wizard -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <h3 style="margin-bottom: var(--space-md);">Student Details</h3>
+        {% if reenrollment %}
+        <p class="text-muted">These details identify the student being updated. Face updates preserve their profile, class rosters and attendance history.</p>
+        {% endif %}
+        {% if teacher_requires_approval %}
+        <p class="text-muted" style="margin-top: calc(var(--space-sm) * -1); margin-bottom: var(--space-md);">
+            This request will not appear in rosters or attendance until a Dean or Office Admin approves it.
+        </p>
+        {% endif %}
+
+        <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label for="student_id" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Student ID</label>
+            <input type="text" id="student_id" value="{{ reenrollment.student_id if reenrollment else correction.student_id if correction else '' }}" {% if reenrollment %}readonly{% endif %} required autocomplete="off" placeholder="e.g. S12345678"
+                   style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+        </div>
+
+        <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label for="name" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Full Name</label>
+            <input type="text" id="name" value="{{ reenrollment.name if reenrollment else correction.name if correction else '' }}" {% if reenrollment %}readonly{% endif %} required autocomplete="off" placeholder="Student’s full name"
+                   style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label for="program_id" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Academic Program</label>
+            <select id="program_id" {% if reenrollment %}disabled{% endif %} required style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                {% if reenrollment %}
+                <option value="{{ reenrollment.program_id }}" selected>{{ reenrollment.program_name }}</option>
+                {% else %}
+                {% if correction %}<option value="">Select an active program...</option>{% endif %}
+                {% for prog in programs %}
+                <option value="{{ prog.id }}" {% if (correction and correction.program_id == prog.id) or (not correction and prog.name == "General / Undecided") %}selected{% endif %}>{{ prog.name }}</option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: var(--space-md);">
+            <label for="year_level" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Year Level</label>
+            <select id="year_level" {% if reenrollment %}disabled{% endif %} required style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                {% if reenrollment %}
+                <option value="{{ reenrollment.year_level }}" selected>{{ reenrollment.year_level }}</option>
+                {% else %}
+                {% for year in ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', '6th Year', 'Irregular'] %}
+                <option value="{{ year }}" {% if (correction and correction.year_level == year) or (not correction and loop.first) %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: var(--space-md); display: flex; align-items: flex-start; gap: var(--space-sm);">
+            <input type="checkbox" id="consent_granted" style="margin-top: 4px;">
+            <label for="consent_granted" style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.4;">
+                <strong style="color: var(--color-text-primary);">Confirm student consent (required)</strong><br>
+                I confirm that the student has signed the biometric data waiver and agreed to the local capture and storage of their face recognition data.
+            </label>
+        </div>
+
+        <!-- 3-Pose Wizard Guidance & Thumbnails -->
+        <div class="wizard-box" style="background: var(--color-bg-input); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-md); margin-bottom: var(--space-md);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span id="wizard-step-title" style="font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); color: var(--color-text-primary);">
+                    Step 1 of 3: Center Pose
+                </span>
+                <button id="reset-poses-btn" type="button" style="display: none; background: none; border: none; color: var(--color-text-muted); font-size: var(--font-size-xs); cursor: pointer; text-decoration: underline;">
+                    Retake All Photos
+                </button>
+            </div>
+            <p id="wizard-step-instruction" style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 0 0 10px 0;">
+                Look at the camera lens, not the screen. Keep your head upright.
+            </p>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <div id="step-pill-0" style="flex: 1; height: 6px; border-radius: 3px; background: var(--color-accent); transition: background 0.3s;"></div>
+                <div id="step-pill-1" style="flex: 1; height: 6px; border-radius: 3px; background: var(--color-border); transition: background 0.3s;"></div>
+                <div id="step-pill-2" style="flex: 1; height: 6px; border-radius: 3px; background: var(--color-border); transition: background 0.3s;"></div>
+            </div>
+
+            <!-- Pose Thumbnail Previews -->
+            <style>
+                .thumb-card:hover, .thumb-card:focus-visible {
+                    border-color: var(--color-accent) !important;
+                }
+                .thumb-card.active {
+                    border: 2px solid var(--color-accent) !important;
+                    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+                }
+                .thumb-card .recapture-label {
+                    position: absolute;
+                    bottom: 4px;
+                    right: 4px;
+                    padding: 4px 8px;
+                    background: rgba(0, 0, 0, 0.6);
+                    color: #fff;
+                    font-size: 10px;
+                    font-weight: 600;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    opacity: 1;
+                    transition: opacity 0.2s;
+                    border-radius: 4px;
+                    z-index: 3;
+                }
+                .thumb-card:focus-visible {
+                    outline: 2px solid var(--color-accent);
+                    outline-offset: 3px;
+                }
+                .thumb-card:hover .recapture-label, .thumb-card:focus-visible .recapture-label {
+                    opacity: 1;
+                }
+            </style>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                <button type="button" aria-label="Capture Center pose" id="thumb-card-0" class="thumb-card active" data-step="0" style="border: 2px solid var(--color-accent); border-radius: var(--radius-sm); padding: 4px; background: var(--color-bg-card); text-align: center; cursor: pointer; transition: all 0.2s; position: relative;">
+                    <span id="thumb-container-0" style="aspect-ratio: 4/3; background: rgba(0,0,0,0.3); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+                        <span style="font-size: 10px; color: var(--color-text-muted);">Center</span>
+                    </span>
+                    <span style="font-size: 11px; color: var(--color-text-secondary); font-weight: 500; display: block; margin-top: 2px;">Center</span>
+                </button>
+                <button type="button" aria-label="Capture Slight Left pose" id="thumb-card-1" class="thumb-card" data-step="1" style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 4px; background: var(--color-bg-card); text-align: center; cursor: pointer; transition: all 0.2s; position: relative;">
+                    <span id="thumb-container-1" style="aspect-ratio: 4/3; background: rgba(0,0,0,0.3); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+                        <span style="font-size: 10px; color: var(--color-text-muted);">Left</span>
+                    </span>
+                    <span style="font-size: 11px; color: var(--color-text-secondary); font-weight: 500; display: block; margin-top: 2px;">Slight Left</span>
+                </button>
+                <button type="button" aria-label="Capture Slight Right pose" id="thumb-card-2" class="thumb-card" data-step="2" style="border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 4px; background: var(--color-bg-card); text-align: center; cursor: pointer; transition: all 0.2s; position: relative;">
+                    <span id="thumb-container-2" style="aspect-ratio: 4/3; background: rgba(0,0,0,0.3); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
+                        <span style="font-size: 10px; color: var(--color-text-muted);">Right</span>
+                    </span>
+                    <span style="font-size: 11px; color: var(--color-text-secondary); font-weight: 500; display: block; margin-top: 2px;">Slight Right</span>
+                </button>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Live Camera Feed & Real-Time Quality Check Overlay -->
+    <div class="card" id="registration-camera-card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); display: flex; flex-direction: column; align-items: center; justify-content: flex-start;">
+        
+        <div class="registration-source-controls" style="width: 100%; display: flex; gap: var(--space-sm); margin-bottom: var(--space-md);">
+            <div style="flex: 1;">
+                <label for="video-source-select" style="display: block; margin-bottom: 4px; font-size: var(--font-size-xs); color: var(--color-text-secondary);">Video Source</label>
+                <select id="video-source-select" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <option value="webcam">Local Webcam</option>
+                    <option value="cctv">Room Camera</option>
+                </select>
+            </div>
+            <div id="cctv-room-container" style="flex: 1; display: none;">
+                <label for="cctv-room-select" style="display: block; margin-bottom: 4px; font-size: var(--font-size-xs); color: var(--color-text-secondary);">Select Room</label>
+                <div class="registration-room-controls" style="display: flex; gap: 8px; align-items: center;">
+                    <select id="cctv-room-select" style="flex: 1; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                        <option value="">Loading rooms...</option>
+                    </select>
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-text-secondary); cursor: pointer;">
+                        <input type="checkbox" id="cctv-rotate" /> Rotate 180°
+                    </label>
+                </div>
+                <button id="reconnect-room-camera" type="button" class="btn btn--secondary" style="margin-top: 8px;" hidden>Reconnect Room Camera</button>
+            </div>
+        </div>
+
+        <p id="camera-step-instruction" aria-live="polite" style="width: 100%; font-weight: 600; margin: 0 0 12px;">Look at the camera lens, not the screen. Keep your head upright.</p>
+        <div id="capture-readiness" role="status" aria-live="polite" aria-atomic="true" style="background: #eef2f6; color: #334155; border-color: #64748b;">
+            <span id="capture-readiness-title">Preparing camera</span>
+            <span id="capture-readiness-detail">Capture stays off until the picture, head angle, and steady hold are ready.</span>
+        </div>
+        <div id="camera-frame" style="position: relative; width: 100%; aspect-ratio: 4/3; max-height: 380px; border-radius: var(--radius-md); overflow: hidden; background: #000;">
+            <div id="camera-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(34, 38, 57, 0.95); z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-xl); text-align: center;">
+                <svg style="width: 48px; height: 48px; color: var(--color-text-muted); margin-bottom: var(--space-md);" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    <p id="camera-status" role="status" aria-live="polite" aria-atomic="true" style="color: #f8fafc; padding: 0 var(--space-md); text-align: center;">Initializing webcam...</p>
+                    <button id="retry-webcam" type="button" class="btn btn--secondary" hidden>Retry Webcam</button>
+            </div>
+
+            <video id="webcam" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
+            <img id="cctv-img" style="display: none; width: 100%; height: 100%; object-fit: cover;" crossorigin="anonymous" />
+            <canvas id="overlay-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4;"></canvas>
+            
+            <!-- Interactive Face Guide Boundary -->
+            <div id="face-guide" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48%; height: 66%; border: 2px dashed rgba(239, 68, 68, 0.7); border-radius: 50%; pointer-events: none; transition: all 0.3s ease; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35); z-index: 3;"></div>
+
+            <!-- Guide Status Banner -->
+            <div id="guide-status-banner" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); max-width: 95%; width: max-content; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); color: #fff; padding: 4px 12px; border-radius: 16px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; z-index: 5; pointer-events: none;">
+                <span id="guide-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-error); display: inline-block;"></span>
+                <span id="guide-text">Align face inside guide</span>
+            </div>
+        </div>
+
+        <div id="enrollment-alert" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" style="display: none; margin-top: 12px; padding: 12px; border-radius: var(--radius-md); border: 1px solid transparent;"></div>
+        <div id="enrollment-submission-status" class="flash flash--info" role="status" aria-live="polite" aria-atomic="true" hidden style="display: none;"></div>
+        {% if reenrollment %}
+        <a id="enrollment-record-link" class="btn btn--secondary" href="{{ url_for('students.student_profile', student_id=reenrollment.id) }}" hidden>Review Student Profile</a>
+        {% elif teacher_requires_approval %}
+        <a id="enrollment-record-link" class="btn btn--secondary" href="{{ url_for('students.my_registration_requests') }}" hidden>Review My Registration Requests</a>
+        {% else %}
+        <a id="enrollment-record-link" class="btn btn--secondary" href="{{ url_for('students.student_directory') }}" hidden>Review Student Directory</a>
+        {% endif %}
+        <button id="start-next-enrollment-camera" type="button" class="btn btn--secondary" hidden>Start camera for next student</button>
+        <div class="capture-actions">
+            <button id="automatic-capture-btn" type="button" class="btn btn--secondary" aria-pressed="false" disabled>Start Automatic Capture</button>
+            <button id="capture-btn" type="button" class="btn btn--primary" disabled>Capture Pose 1: Center</button>
+        </div>
+        <p id="automatic-capture-status" role="status" aria-live="polite" aria-atomic="true" style="width: 100%; margin: 8px 0 0; font-size: 13px;">Automatic capture is off. Loading the pose guide...</p>
+        <canvas id="canvas" style="display: none;"></canvas>
+        <p id="capture-help" class="text-muted" style="font-size: 13px; margin: 10px 0 0;">Choose Start Automatic Capture to take each photo after a steady 2-second hold, or use the capture button yourself. Turn only a little for the side photos; keep both eyes visible.</p>
+
+        <!-- Position and distance are shown separately from image quality. -->
+        <details id="capture-quality-details" style="width: 100%; margin-top: 12px;">
+        <summary style="cursor: pointer;">Picture checks and camera tips</summary>
+        <p class="text-muted" style="font-size: 12px; margin: 8px 0;">Keep the camera near eye level and light your face from the front. Live guidance is an estimate. Each photo is checked before it is accepted.</p>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; margin-top: 12px;">
+            <div id="badge-light" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; background: rgba(239, 68, 68, 0.15); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.3); transition: all 0.2s;">
+                <span>Scene Light</span>
+                <span class="badge-val" style="font-weight: 600;">Check...</span>
+            </div>
+            <div id="badge-sharpness" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; background: rgba(239, 68, 68, 0.15); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.3); transition: all 0.2s;">
+                <span>Sharpness</span>
+                <span class="badge-val" style="font-weight: 600;">Check...</span>
+            </div>
+            <div id="badge-face" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; background: rgba(239, 68, 68, 0.15); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.3); transition: all 0.2s;">
+                <span>Preview Face</span>
+                <span class="badge-val" style="font-weight: 600;">Check...</span>
+            </div>
+            <div id="badge-centered" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; background: rgba(239, 68, 68, 0.15); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.3); transition: all 0.2s;">
+                <span>Centered</span>
+                <span class="badge-val" style="font-weight: 600;">Check...</span>
+            </div>
+            <div id="badge-face-size" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; background: rgba(239, 68, 68, 0.15); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.3);">
+                <span>Face Size</span>
+                <span class="badge-val" style="font-weight: 600;">Check...</span>
+            </div>
+            <div id="badge-pose" style="padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; border: 1px solid var(--color-border);">
+                <span>Pose Guide</span>
+                <span class="badge-val">Loading...</span>
+            </div>
+        </div>
+        </details>
+        <section id="capture-review" hidden style="width: 100%; margin-top: 16px;" aria-labelledby="capture-review-title">
+            <h4 id="capture-review-title">Last capture attempt</h4>
+            <p id="capture-review-text" class="text-muted" style="font-size: 13px; margin: 8px 0;"></p>
+            <img id="capture-review-image" alt="Image sent for validation" style="display: block; width: 100%; max-height: 280px; object-fit: contain; background: #000; border-radius: var(--radius-sm);" />
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/enrollment-framing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/enrollment-auto-capture.js') }}"></script>
+<script>
+window.ENROLLMENT_CONFIG = {{ quality_config | tojson | safe if quality_config else '{}' }};
+
+document.addEventListener("DOMContentLoaded", () => {
+    const video = document.getElementById("webcam");
+    const videoSourceSelect = document.getElementById("video-source-select");
+    const cctvRoomContainer = document.getElementById("cctv-room-container");
+    const cctvRoomSelect = document.getElementById("cctv-room-select");
+    const cctvSourceOption = videoSourceSelect.querySelector('option[value="cctv"]');
+    const cctvImg = document.getElementById("cctv-img");
+    const cctvRotateCheckbox = document.getElementById("cctv-rotate");
+    const reconnectRoomCameraBtn = document.getElementById("reconnect-room-camera");
+    const canvas = document.getElementById("canvas");
+    const overlayCanvas = document.getElementById("overlay-canvas");
+    const overlayCtx = overlayCanvas ? overlayCanvas.getContext("2d") : null;
+    const captureBtn = document.getElementById("capture-btn");
+    const cameraOverlay = document.getElementById("camera-overlay");
+    const cameraStatus = document.getElementById("camera-status");
+    const alertBox = document.getElementById("enrollment-alert");
+    const submissionStatus = document.getElementById("enrollment-submission-status");
+    const faceGuide = document.getElementById("face-guide");
+    const guideDot = document.getElementById("guide-dot");
+    const guideText = document.getElementById("guide-text");
+
+    const badgeLight = document.getElementById("badge-light");
+    const badgeSharpness = document.getElementById("badge-sharpness");
+    const badgeFace = document.getElementById("badge-face");
+    const badgeCentered = document.getElementById("badge-centered");
+    const badgeFaceSize = document.getElementById("badge-face-size");
+    const badgePose = document.getElementById("badge-pose");
+    const autoCaptureBtn = document.getElementById('automatic-capture-btn');
+    const autoCaptureStatus = document.getElementById('automatic-capture-status');
+    const captureReview = document.getElementById("capture-review");
+    const captureReviewImage = document.getElementById("capture-review-image");
+    const captureReviewText = document.getElementById("capture-review-text");
+
+    const wizardStepTitle = document.getElementById("wizard-step-title");
+    const wizardStepInstruction = document.getElementById("wizard-step-instruction");
+    const resetPosesBtn = document.getElementById("reset-poses-btn");
+
+    const stepPill0 = document.getElementById("step-pill-0");
+    const stepPill1 = document.getElementById("step-pill-1");
+    const stepPill2 = document.getElementById("step-pill-2");
+
+    const teacherRequiresApproval = {{ 'true' if session.get('role') == 'Teacher' else 'false' }};
+    const updatingBiometrics = {{ 'true' if reenrollment else 'false' }};
+    
+    let streamActive = false;
+    let animFrameId = null;
+    let faceApiLoaded = false;
+    let landmarksLoaded = false;
+    let automaticCaptureArmed = false;
+    let automaticCaptureTrigger = false;
+    const autoCaptureTracker = window.EnrollmentAutoCapture.createTracker();
+    let isValidating = false;
+    let isReCapturing = false;
+    let cameraInitGeneration = 0;
+    let roomRenewTimer = null;
+    let roomConnectTimer = null;
+    let roomHealthTimer = null;
+    let roomHealthController = null;
+    let roomRenewAt = 0;
+    // Registration streams have a 600-second server lease. Renew before its
+    // end: an MJPEG <img> can otherwise keep displaying the last decoded image.
+    const ROOM_RENEW_INTERVAL_MS = 540000;
+
+    // 3-Pose Wizard State
+    let currentPoseStep = 0; // 0: Center, 1: Slight Left, 2: Slight Right
+    const capturedImages = [null, null, null];
+    let attemptGeneration = 0;
+    let activeCaptureRequest = null;
+    let enrollmentPending = false;
+    let authExpired = false;
+    let pageRetired = false;
+    let qualityReady = false;
+    let latestQualityFrame = null;
+    let qualityExpiryTimer = null;
+    let liveCaptureSignal = ['adjust', 'Adjust position', 'Follow the instruction above the camera.'];
+    let photoResultSignal = null;
+    let photoResultUntil = 0;
+    let submissionSignal = null;
+    let guideFaceBox = null;
+    const QUALITY_FRAME_MAX_AGE_MS = 1500;
+    function armQualityExpiry(frame) {
+        if (qualityExpiryTimer) clearTimeout(qualityExpiryTimer);
+        qualityExpiryTimer = null;
+        if (!frame) return;
+        qualityExpiryTimer = setTimeout(() => {
+            qualityExpiryTimer = null;
+            if (latestQualityFrame !== frame || authExpired || pageRetired || isValidating || enrollmentPending) return;
+            qualityReady = false;
+            latestQualityFrame = null;
+            autoCaptureTracker.reset();
+            liveCaptureSignal = ['adjust', 'Wait for a fresh picture', 'Capture is paused until the camera check catches up.'];
+            updateWizardUI();
+        }, Math.max(1, QUALITY_FRAME_MAX_AGE_MS - (performance.now() - frame.capturedAt) + 1));
+    }
+    function clearCaptureReview() {
+        captureReview.hidden = true;
+        captureReviewImage.removeAttribute('src');
+        captureReviewText.textContent = '';
+    }
+    const identityFields = ['student_id', 'name', 'program_id', 'year_level', 'consent_granted', 'resubmit-request-id'];
+    function enrollmentIdentity() {
+        return JSON.stringify(identityFields.map(id => {
+            const field = document.getElementById(id);
+            return id === 'consent_granted' ? field.checked : field.value;
+        }).concat([videoSourceSelect.value, cctvRoomSelect.value, cctvRotateCheckbox.checked]));
+    }
+    let attemptIdentity = enrollmentIdentity();
+
+    function retireCaptureRequest(preserveSubmission = false) {
+        armQualityExpiry(null);
+        autoCaptureTracker.reset();
+        liveCaptureSignal = ['adjust', 'Wait for the picture', 'A fresh camera check is needed.'];
+        photoResultSignal = null;
+        guideFaceBox = null;
+        qualityReady = false;
+        latestQualityFrame = null;
+        // Camera health can fail while an enrollment write is still committing.
+        // Retire the preview's quality frame, but keep tracking that write.
+        if (preserveSubmission && enrollmentPending) return;
+        attemptGeneration += 1;
+        const retired = activeCaptureRequest;
+        activeCaptureRequest = null;
+        isValidating = false;
+        qualityReady = false;
+        latestQualityFrame = null;
+        if (retired && retired.controller) retired.controller.abort();
+    }
+
+    function resetCaptureAttempt() {
+        if (!enrollmentPending) submissionSignal = null;
+        pauseAutomaticCapture();
+        retireCaptureRequest();
+        clearCaptureReview();
+        attemptIdentity = enrollmentIdentity();
+        currentPoseStep = 0;
+        capturedImages.fill(null);
+        isReCapturing = false;
+        updateWizardUI();
+        if (roomRenewAt) scheduleRoomRenewal(cameraInitGeneration, cctvRoomSelect.value);
+    }
+
+    function syncEnrollmentIdentity() {
+        if (attemptIdentity === enrollmentIdentity()) return true;
+        resetCaptureAttempt();
+        return false;
+    }
+
+    function requestIsCurrent(request) {
+        return syncEnrollmentIdentity() && !authExpired && !pageRetired
+            && activeCaptureRequest === request && request.generation === attemptGeneration;
+    }
+
+    function expireEnrollment() {
+        authExpired = true;
+        submissionStatus.hidden = true;
+        submissionStatus.style.display = 'none';
+        document.getElementById('enrollment-record-link').hidden = true;
+        stopCamera();
+    }
+
+    identityFields.forEach(id => {
+        const field = document.getElementById(id);
+        field.addEventListener('input', syncEnrollmentIdentity);
+        field.addEventListener('change', syncEnrollmentIdentity);
+    });
+
+    const poseConfig = [
+        {
+            name: "Center",
+            title: "Step 1 of 3: Center Pose",
+            instruction: "Look at the camera lens, not the screen. Keep your head upright.",
+            btnLabel: "Capture Pose 1: Center"
+        },
+        {
+            name: "Slight Left",
+            title: "Step 2 of 3: Slight Left Pose",
+            instruction: "Turn a little to your own left. Keep both eyes visible; do not turn sideways.",
+            btnLabel: "Capture Pose 2: Slight Left"
+        },
+        {
+            name: "Slight Right",
+            title: "Step 3 of 3: Slight Right Pose",
+            instruction: "Turn a little to your own right. Keep both eyes visible; do not turn sideways.",
+            btnLabel: "Capture Pose 3: Slight Right"
+        }
+    ];
+
+    // Show Alert helper
+    function showAlert(message, isError = false) {
+        alertBox.setAttribute("role", isError ? "alert" : "status");
+        alertBox.setAttribute("aria-live", isError ? "assertive" : "polite");
+        alertBox.style.display = "block";
+        alertBox.style.backgroundColor = isError ? "rgba(248, 113, 113, 0.1)" : "rgba(52, 211, 153, 0.1)";
+        alertBox.style.borderColor = isError ? "var(--color-error)" : "var(--color-success)";
+        alertBox.style.color = isError ? "var(--color-error)" : "var(--color-success)";
+        alertBox.innerText = message;
+        // Capture feedback stays beside the preview; live regions announce it
+        // without moving focus or scrolling the operator away from the camera.
+    }
+
+    function showSubmissionStatus(request, outcome, detail = '') {
+        if (authExpired || pageRetired) return '';
+        const destination = updatingBiometrics ? 'Student Profile' : teacherRequiresApproval ? 'My Registration Requests' : 'Student Directory';
+        let message;
+        if (outcome === 'pending') {
+            message = `Submitting ${request.studentLabel}. Waiting for the server response. Resetting poses does not cancel this submission.`;
+        } else if (outcome === 'success') {
+            message = updatingBiometrics
+                ? `Face enrollment for ${request.studentLabel} was updated. Open ${destination} to review the latest enrollment time.`
+                : teacherRequiresApproval
+                ? `Registration request for ${request.studentLabel} was submitted for approval. Open ${destination} to track the review.`
+                : `Enrollment for ${request.studentLabel} was completed. Open ${destination} to review the record.`;
+        } else if (outcome === 'failure') {
+            message = `The server rejected the submission for ${request.studentLabel}. ${detail || 'Enrollment failed.'} Check ${destination} before trying again.`;
+        } else {
+            message = `The outcome of the submission for ${request.studentLabel} could not be confirmed. It may have completed. Check ${destination} before submitting again.`;
+        }
+        // Keep write outcomes separate from the current capture attempt. Use
+        // plain text and never move focus away from newly entered details.
+        submissionStatus.innerText = message;
+        submissionStatus.className = `flash flash--${outcome === 'success' ? 'success' : outcome === 'pending' ? 'info' : 'warning'}`;
+        submissionStatus.hidden = false;
+        submissionStatus.style.display = 'block';
+        document.getElementById('enrollment-record-link').hidden = outcome === 'pending';
+        submissionSignal = outcome === 'success'
+            ? ['accepted', teacherRequiresApproval ? 'Request submitted' : 'Enrollment complete', message]
+            : outcome === 'pending' ? ['checking', 'Saving enrollment', 'Wait for the confirmation.']
+            : ['error', outcome === 'failure' ? 'Enrollment not saved' : 'Check the saved record', message];
+        renderCaptureSignal();
+        return message;
+    }
+
+    function renderCaptureSignal() {
+        let signal = liveCaptureSignal;
+        if (authExpired || pageRetired) signal = ['error', 'Session ended', 'Sign in again before capturing.'];
+        else if (submissionSignal) signal = submissionSignal;
+        else if (!streamActive) signal = ['adjust', 'Camera not ready', 'Connect the camera before capturing.'];
+        else if (isValidating) signal = ['checking', 'Checking photo', 'Wait. The photo has not been accepted yet.'];
+        else if (photoResultSignal && performance.now() < photoResultUntil) signal = photoResultSignal;
+        else if (capturedImages.every(img => img !== null) && !isReCapturing)
+            signal = ['accepted', '3 photos accepted', 'Review your photos, then submit to finish enrollment.'];
+        const [kind, title, detail] = signal;
+        const colors = {adjust: ['#eef2f6', '#334155', '#64748b'], hold: ['#dbeafe', '#1e3a8a', '#2563eb'],
+            checking: ['#dbeafe', '#1e3a8a', '#2563eb'], ready: ['#dcfce7', '#14532d', '#16a34a'],
+            accepted: ['#dcfce7', '#14532d', '#16a34a'], error: ['#fee2e2', '#7f1d1d', '#dc2626']};
+        const [background, foreground, border] = colors[kind];
+        const panel = document.getElementById('capture-readiness');
+        panel.style.background = background;
+        panel.style.color = foreground;
+        panel.style.borderColor = border;
+        panel.setAttribute('data-state', kind);
+        const titleNode = document.getElementById('capture-readiness-title');
+        const detailNode = document.getElementById('capture-readiness-detail');
+        const markedTitle = `${kind === 'accepted' ? '✓ ' : kind === 'ready' ? '● ' : ''}${title}`;
+        if (titleNode.innerText !== markedTitle) titleNode.innerText = markedTitle;
+        if (detailNode.innerText !== detail) detailNode.innerText = detail;
+        document.getElementById('camera-frame').style.outline = `6px solid ${border}`;
+        document.getElementById('camera-frame').style.outlineOffset = '-6px';
+        faceGuide.style.borderColor = border;
+        faceGuide.style.borderWidth = '4px';
+        guideDot.style.background = border;
+        if (overlayCtx) {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            if (guideFaceBox) {
+                overlayCtx.strokeStyle = border;
+                overlayCtx.lineWidth = 3;
+                overlayCtx.strokeRect(guideFaceBox.x, guideFaceBox.y, guideFaceBox.width, guideFaceBox.height);
+            }
+        }
+    }
+
+    // Interactive Jump to Pose Step (R3)
+    function jumpToPoseStep(targetIndex) {
+        if (authExpired || pageRetired || enrollmentPending || targetIndex < 0 || targetIndex > 2) return;
+        pauseAutomaticCapture('Automatic capture paused. Check the selected pose before starting again.');
+        syncEnrollmentIdentity();
+        retireCaptureRequest();
+        clearCaptureReview();
+        alertBox.style.display = 'none';
+        currentPoseStep = targetIndex;
+        // Selecting a pose explicitly retires its earlier image, even if the
+        // operator switches steps again before its replacement is validated.
+        capturedImages[targetIndex] = null;
+        isReCapturing = true;
+        updateWizardUI();
+    }
+    window.jumpToPoseStep = jumpToPoseStep;
+
+    // Render Pose Thumbnail Preview with Badge & Hover Label (R3)
+    function renderThumbnail(index) {
+        const container = document.getElementById(`thumb-container-${index}`);
+        if (!container) return;
+        if (capturedImages[index]) {
+            container.innerHTML = `
+                <img src="${capturedImages[index]}" alt="" style="width: 100%; height: 100%; object-fit: cover;">
+                <span aria-hidden="true" style="position: absolute; top: 2px; right: 2px; background: #10B981; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 2; box-shadow: 0 1px 3px rgba(0,0,0,0.3);" title="Pose Validated"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 4 4L19 6"/></svg></span>
+                <span class="recapture-label" aria-hidden="true">Retake</span>
+            `;
+        } else {
+            const labels = ["Center", "Left", "Right"];
+            container.innerHTML = `<span style="font-size: 10px; color: var(--color-text-muted);">${labels[index]}</span>`;
+        }
+    }
+
+    // Attach click events for thumbnail cards & containers
+    for (let i = 0; i < 3; i++) {
+        const card = document.getElementById(`thumb-card-${i}`);
+        if (card) {
+            card.addEventListener("click", () => jumpToPoseStep(i));
+        }
+    }
+
+    async function prepareFaceApiBackend() {
+        try {
+            if (await faceapi.tf.setBackend("webgl")) {
+                await faceapi.tf.ready();
+                return;
+            }
+        } catch {
+            // The CPU backend below remains available when WebGL cannot initialize.
+        }
+        if (!await faceapi.tf.setBackend("cpu")) {
+            throw new Error("No supported TensorFlow.js backend is available.");
+        }
+        await faceapi.tf.ready();
+    }
+
+    // Initialize face-api.js
+    async function initFaceApi() {
+        if (typeof faceapi !== "undefined") {
+            try {
+                await prepareFaceApiBackend();
+                await faceapi.nets.tinyFaceDetector.loadFromUri("{{ url_for('static', filename='vendor/face-api/1.7.15/model') }}");
+                faceApiLoaded = true;
+            } catch (e) {
+                console.warn("face-api model load notice:", e);
+                faceApiLoaded = false;
+            }
+            if (faceApiLoaded) {
+                try {
+                    await faceapi.nets.faceLandmark68TinyNet.loadFromUri("{{ url_for('static', filename='vendor/face-api/1.7.15/model') }}");
+                    landmarksLoaded = true;
+                } catch {
+                    landmarksLoaded = false;
+                }
+            }
+        }
+        pauseAutomaticCapture(landmarksLoaded
+            ? 'Automatic capture is off. Start when you are ready; you can pause at any time.'
+            : 'Capture is unavailable because the pose guide could not load. Reload the page to try again.');
+    }
+
+    // Initialize Webcam
+    let currentStream = null;
+
+    function disableCctvSelection(optionLabel, message, isError) {
+        cctvRoomSelect.disabled = true;
+        cctvRoomSelect.innerHTML = `<option value="">${optionLabel}</option>`;
+        if (cctvSourceOption) cctvSourceOption.disabled = true;
+        if (videoSourceSelect.value === 'cctv') {
+            videoSourceSelect.value = 'webcam';
+            cctvRoomContainer.style.display = 'none';
+        }
+        showAlert(message, isError);
+    }
+
+    async function fetchCameras() {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        try {
+            const res = await fetch("/api/registration/cameras", {
+                signal: controller.signal
+            });
+            const cameras = await AuthResponse.readJson(res);
+            if (pageRetired) return false;
+            if (AuthResponse.redirectIfUnauthorized(res, cameras)) {
+                expireEnrollment();
+                return false;
+            }
+            if (!res.ok) {
+                throw new Error(cameras.error || "Unable to load registration cameras.");
+            }
+            if (!Array.isArray(cameras)) {
+                throw new Error("Registration cameras returned an invalid response.");
+            }
+            const readyCameras = cameras.filter(
+                camera => camera.lifecycle_status === 'Ready'
+            );
+            if (!readyCameras.length) {
+                disableCctvSelection(
+                    'No registration room cameras ready',
+                    'No room camera is ready for enrollment. Local Webcam has been selected.',
+                    false
+                );
+                return true;
+            }
+            cctvRoomSelect.disabled = false;
+            if (cctvSourceOption) cctvSourceOption.disabled = false;
+            cctvRoomSelect.innerHTML = '<option value="">Select a room camera...</option>';
+            readyCameras.forEach(cam => {
+                const opt = document.createElement("option");
+                opt.value = cam.id;
+                opt.textContent = `${cam.room_number || 'Unassigned'} - ${cam.name}`;
+                cctvRoomSelect.appendChild(opt);
+            });
+            return true;
+        } catch (e) {
+            if (pageRetired) return false;
+            console.error("Failed to load cameras", e);
+            disableCctvSelection(
+                'Room cameras unavailable',
+                'Room camera inventory is unavailable. Use Local Webcam or reload the page to try again.',
+                true
+            );
+            return true;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    videoSourceSelect.addEventListener("change", () => {
+        if (videoSourceSelect.value === "cctv") {
+            cctvRoomContainer.style.display = "block";
+        } else {
+            cctvRoomContainer.style.display = "none";
+        }
+        initCamera();
+    });
+
+    cctvRoomSelect.addEventListener("change", () => {
+        if (videoSourceSelect.value === "cctv") {
+            initCamera();
+        }
+    });
+
+    cctvRotateCheckbox.addEventListener("change", (e) => {
+        resetCaptureAttempt();
+        cctvImg.style.transform = e.target.checked ? "rotate(180deg)" : "";
+    });
+
+    function stopCamera(invalidatePending = true) {
+        document.getElementById('start-next-enrollment-camera').hidden = true;
+        document.getElementById('retry-webcam').hidden = true;
+        clearRoomCameraTimers();
+        roomRenewAt = 0;
+        reconnectRoomCameraBtn.hidden = true;
+        if (invalidatePending && invalidatePending.type === 'pagehide') pageRetired = true;
+        if (pageRetired) {
+            submissionStatus.hidden = true;
+            submissionStatus.style.display = 'none';
+        }
+        if (invalidatePending) cameraInitGeneration += 1;
+        streamActive = false;
+        resetCaptureAttempt();
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        const streamToStop = currentStream;
+        currentStream = null;
+        if (streamToStop) streamToStop.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        cctvImg.onload = null;
+        cctvImg.onerror = null;
+        cctvImg.src = "";
+    }
+
+    function setCameraStatus(message, isError = false) {
+        cameraStatus.setAttribute("role", isError ? "alert" : "status");
+        cameraStatus.setAttribute("aria-live", isError ? "assertive" : "polite");
+        // Preview uses a dark background in both app themes.
+        cameraStatus.style.color = isError ? "#fecaca" : "#f8fafc";
+        cameraStatus.innerText = message;
+    }
+
+    function markWebcamUnavailable(message) {
+        stopCamera();
+        cameraOverlay.style.display = "flex";
+        setCameraStatus(message, true);
+        document.getElementById('retry-webcam').hidden = false;
+        captureBtn.disabled = true;
+        captureBtn.style.opacity = "0.5";
+        captureBtn.style.cursor = "not-allowed";
+    }
+
+    function clearRoomCameraTimers() {
+        if (roomHealthTimer !== null) clearTimeout(roomHealthTimer);
+        roomHealthTimer = null;
+        if (roomHealthController) roomHealthController.abort();
+        roomHealthController = null;
+        if (roomRenewTimer !== null) clearTimeout(roomRenewTimer);
+        if (roomConnectTimer !== null) clearTimeout(roomConnectTimer);
+        roomRenewTimer = null;
+        roomConnectTimer = null;
+    }
+
+    function roomCameraIsCurrent(generation, cameraId) {
+        return !authExpired && !pageRetired && generation === cameraInitGeneration
+            && videoSourceSelect.value === 'cctv' && cctvRoomSelect.value === cameraId;
+    }
+
+    function scheduleRoomRenewal(generation, cameraId, delay = null) {
+        if (roomRenewTimer !== null) clearTimeout(roomRenewTimer);
+        roomRenewTimer = null;
+        if (!roomRenewAt || !roomCameraIsCurrent(generation, cameraId)) return;
+        const timer = setTimeout(() => {
+            if (roomRenewTimer !== timer || !roomCameraIsCurrent(generation, cameraId)) return;
+            roomRenewTimer = null;
+            if (enrollmentPending) {
+                // Final enrollment is a write whose outcome must stay tracked.
+                scheduleRoomRenewal(generation, cameraId, 1000);
+                return;
+            }
+            reconnectRoomCamera();
+        }, delay === null ? Math.max(0, roomRenewAt - performance.now()) : delay);
+        roomRenewTimer = timer;
+    }
+
+    function startRoomCamera(generation, cameraId) {
+        pauseAutomaticCapture('Automatic capture paused for camera reconnection. Start again when the preview is ready.');
+        clearRoomCameraTimers();
+        roomRenewAt = 0;
+        streamActive = false;
+        retireCaptureRequest();
+        clearCaptureReview();
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+        cctvImg.onload = null;
+        cctvImg.onerror = null;
+        cctvImg.src = '';
+        reconnectRoomCameraBtn.hidden = false;
+        reconnectRoomCameraBtn.disabled = true;
+        cameraOverlay.style.display = 'flex';
+        setCameraStatus("Connecting to room camera...");
+        updateWizardUI();
+        let connectionAttempt = 0;
+
+        function waitToConnect(delay, retries) {
+            const timer = setTimeout(() => {
+                if (roomConnectTimer !== timer || !roomCameraIsCurrent(generation, cameraId)) return;
+                roomConnectTimer = null;
+                connect(retries);
+            }, delay);
+            roomConnectTimer = timer;
+        }
+
+        async function explainFailedCamera(attempt, streamToken) {
+            const controller = new AbortController();
+            roomHealthController = controller;
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            try {
+                const response = await fetch('/api/registration/cameras/' + cameraId + '/status?t=' + streamToken, {signal: controller.signal, cache: 'no-store'});
+                const data = await AuthResponse.readJson(response);
+                if (controller.signal.aborted || attempt !== connectionAttempt || !roomCameraIsCurrent(generation, cameraId)) return;
+                if (response.status === 401) {
+                    stopCamera();
+                    AuthResponse.redirectIfUnauthorized(response, data);
+                } else if (response.ok && data.busy === true) {
+                    setCameraStatus('Room camera is busy with another session or preview. Stop that camera use, then select Reconnect Room Camera.', true);
+                }
+            } catch (error) {
+                // Keep the existing connection guidance when status is unavailable.
+            } finally {
+                clearTimeout(timeout);
+                if (roomHealthController === controller) roomHealthController = null;
+            }
+        }
+
+        function failed(retries, attempt, streamToken) {
+            if (attempt !== connectionAttempt || !roomCameraIsCurrent(generation, cameraId)) return;
+            pauseAutomaticCapture('Automatic capture paused because the room camera disconnected. Start again after it reconnects.');
+            connectionAttempt += 1;
+            clearRoomCameraTimers();
+            roomRenewAt = 0;
+            streamActive = false;
+            retireCaptureRequest(true);
+            [badgeLight, badgeSharpness, badgeFace, badgeCentered, badgeFaceSize, badgePose].forEach(badge => setBadgeState(badge, false, 'Camera unavailable'));
+            cctvImg.onload = null;
+            cctvImg.onerror = null;
+            cctvImg.src = '';
+            cameraOverlay.style.display = 'flex';
+            if (retries > 0) {
+                setCameraStatus('Retrying room camera connection... Accepted poses are kept.');
+                waitToConnect(1500, retries - 1);
+            } else {
+                setCameraStatus('Room camera unavailable. Check its connection, then select Reconnect Room Camera.', true);
+                reconnectRoomCameraBtn.disabled = false;
+                explainFailedCamera(connectionAttempt, streamToken);
+            }
+            updateWizardUI();
+        }
+
+        function connect(retries) {
+            const attempt = ++connectionAttempt;
+            const streamToken = Date.now() + '-' + generation + '-' + retries;
+            function scheduleHealthCheck() {
+                roomHealthTimer = setTimeout(checkHealth, 2000);
+            }
+            async function checkHealth() {
+                roomHealthTimer = null;
+                if (attempt !== connectionAttempt || !roomCameraIsCurrent(generation, cameraId) || !streamActive) return;
+                const controller = new AbortController();
+                roomHealthController = controller;
+                const timeout = setTimeout(() => controller.abort(), 4000);
+                try {
+                    const response = await fetch('/api/registration/cameras/' + cameraId + '/status?t=' + streamToken, {signal: controller.signal, cache: 'no-store'});
+                    const data = await AuthResponse.readJson(response);
+                    if (attempt !== connectionAttempt || !roomCameraIsCurrent(generation, cameraId)) return;
+                    if (response.status === 401) {
+                        stopCamera();
+                        AuthResponse.redirectIfUnauthorized(response, data);
+                        return;
+                    }
+                    if (!response.ok || data.fresh !== true) {
+                        failed(retries, attempt, streamToken);
+                        return;
+                    }
+                    scheduleHealthCheck();
+                } catch (error) {
+                    if (attempt === connectionAttempt && roomCameraIsCurrent(generation, cameraId)) failed(retries, attempt, streamToken);
+                } finally {
+                    clearTimeout(timeout);
+                    if (roomHealthController === controller) roomHealthController = null;
+                }
+            }
+            cctvImg.onload = () => {
+                if (attempt !== connectionAttempt || !roomCameraIsCurrent(generation, cameraId) || streamActive) return;
+                if (roomConnectTimer !== null) clearTimeout(roomConnectTimer);
+                roomConnectTimer = null;
+                cameraOverlay.style.display = 'none';
+                streamActive = true;
+                reconnectRoomCameraBtn.disabled = false;
+                if (overlayCanvas) {
+                    overlayCanvas.width = cctvImg.naturalWidth || 640;
+                    overlayCanvas.height = cctvImg.naturalHeight || 480;
+                }
+                startQualityLoop();
+                scheduleHealthCheck();
+            };
+            cctvImg.onerror = () => failed(retries, attempt, streamToken);
+            const timer = setTimeout(() => {
+                if (roomConnectTimer !== timer) return;
+                failed(retries, attempt, streamToken);
+            }, 30000);
+            roomConnectTimer = timer;
+            roomRenewAt = performance.now() + ROOM_RENEW_INTERVAL_MS;
+            scheduleRoomRenewal(generation, cameraId);
+            cctvImg.src = '/api/registration/cameras/' + cameraId + '/stream?t=' + streamToken;
+        }
+
+        // Clearing the old <img> ends its request. Allow the server to release
+        // its exclusive camera lease, and retry once if teardown is still busy.
+        waitToConnect(500, 1);
+    }
+
+    function reconnectRoomCamera() {
+        if (authExpired || pageRetired || enrollmentPending || videoSourceSelect.value !== 'cctv' || !cctvRoomSelect.value) return;
+        if (!syncEnrollmentIdentity()) return;
+        startRoomCamera(++cameraInitGeneration, cctvRoomSelect.value);
+    }
+
+    async function initCamera() {
+        if (authExpired || pageRetired) return;
+        const initGeneration = ++cameraInitGeneration;
+        stopCamera(false);
+        const source = videoSourceSelect.value;
+        if (source === "webcam") {
+            cctvImg.style.display = "none";
+            video.style.display = "block";
+            cameraOverlay.style.display = "flex";
+            setCameraStatus("Initializing webcam...");
+            const cameraApiAvailable = (
+                typeof navigator !== "undefined"
+                && navigator.mediaDevices
+                && typeof navigator.mediaDevices.getUserMedia === "function"
+            );
+            if (!cameraApiAvailable) {
+                markWebcamUnavailable(
+                    "This browser does not provide webcam access here. Use a browser with camera support on HTTPS or localhost."
+                );
+                return;
+            }
+            try {
+                const acquiredStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } 
+                });
+                if (initGeneration !== cameraInitGeneration) {
+                    acquiredStream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+                currentStream = acquiredStream;
+                video.srcObject = acquiredStream;
+                acquiredStream.getVideoTracks().forEach(track => {
+                    track.addEventListener("ended", () => {
+                        if (initGeneration !== cameraInitGeneration || currentStream !== acquiredStream) return;
+                        markWebcamUnavailable(
+                            "The webcam stopped unexpectedly. Reconnect it, then select Retry Webcam."
+                        );
+                    }, { once: true });
+                });
+                video.onloadedmetadata = async () => {
+                    if (initGeneration !== cameraInitGeneration || currentStream !== acquiredStream) return;
+                    try {
+                        await video.play();
+                    } catch {
+                        if (initGeneration !== cameraInitGeneration || currentStream !== acquiredStream) return;
+                        markWebcamUnavailable(
+                            "The webcam connected, but its preview could not start. Select Retry Webcam to reconnect."
+                        );
+                        return;
+                    }
+                    if (initGeneration !== cameraInitGeneration || currentStream !== acquiredStream) return;
+                    cameraOverlay.style.display = "none";
+                    streamActive = true;
+                    if (overlayCanvas) {
+                        overlayCanvas.width = video.videoWidth || 640;
+                        overlayCanvas.height = video.videoHeight || 480;
+                    }
+                    startQualityLoop();
+                };
+            } catch (error) {
+                if (initGeneration !== cameraInitGeneration) return;
+                const messages = {
+                    NotAllowedError: "Camera access was denied by the browser or operating system. Allow camera access in their settings, then select Retry Webcam.",
+                    SecurityError: "Camera access is disabled by this browser's security settings. Enable camera access, then select Retry Webcam.",
+                    NotFoundError: "No webcam was found. Connect or enable a webcam, then select Retry Webcam.",
+                    NotReadableError: "The webcam could not be opened. Another app may be using it, or the device may be unavailable. Close other camera apps and check the connection, then select Retry Webcam.",
+                    OverconstrainedError: "The webcam cannot provide the requested video settings. Connect another webcam, then select Retry Webcam.",
+                    AbortError: "The webcam connection was interrupted. Select Retry Webcam to reconnect."
+                };
+                markWebcamUnavailable(messages[error?.name] || "Unable to start the webcam. Check camera permission and the device connection, then select Retry Webcam.");
+            }
+        } else if (source === "cctv") {
+            video.style.display = "none";
+            cctvImg.style.display = "block";
+            const camId = cctvRoomSelect.value;
+            if (!camId) {
+                cameraOverlay.style.display = "flex";
+                setCameraStatus("Please select a room camera from the dropdown.");
+                streamActive = false;
+                return;
+            }
+            startRoomCamera(initGeneration, camId);
+        }
+    }
+
+    document.getElementById('retry-webcam').addEventListener('click', () => {
+        if (videoSourceSelect.value === 'webcam') initCamera();
+    });
+    reconnectRoomCameraBtn.addEventListener('click', reconnectRoomCamera);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            pauseAutomaticCapture('Automatic capture paused because this page was hidden.');
+            if (activeCaptureRequest && activeCaptureRequest.automatic) retireCaptureRequest();
+            qualityReady = false;
+            latestQualityFrame = null;
+            updateWizardUI();
+        }
+    });
+    window.addEventListener("pagehide", stopCamera, { once: true });
+    window.addEventListener("pageshow", (event) => {
+        // A cached Back navigation must recheck authorization and begin empty.
+        if (event.persisted) window.location.reload();
+    });
+
+    // Quality check algorithms
+    function computeLuminance(imageData) {
+        const data = imageData.data || imageData;
+        let sum = 0;
+        let count = 0;
+        for (let i = 0; i < data.length; i += 16) {
+            sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            count++;
+        }
+        return count > 0 ? sum / count : 0;
+    }
+
+    function computeLaplacianVariance(offCtx, w, h) {
+        const sampleW = 160;
+        const sampleH = 120;
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = sampleW;
+        tempCanvas.height = sampleH;
+        const tempCtx = tempCanvas.getContext("2d");
+        tempCtx.drawImage(offCtx.canvas, 0, 0, sampleW, sampleH);
+        const pixels = tempCtx.getImageData(0, 0, sampleW, sampleH).data;
+
+        const gray = new Float32Array(sampleW * sampleH);
+        for (let i = 0; i < pixels.length; i += 4) {
+            gray[i / 4] = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+        }
+
+        let sumLap = 0;
+        let sumLapSq = 0;
+        let count = 0;
+
+        for (let y = 1; y < sampleH - 1; y++) {
+            for (let x = 1; x < sampleW - 1; x++) {
+                const idx = y * sampleW + x;
+                const lap = gray[idx - sampleW] + gray[idx - 1] - 4 * gray[idx] + gray[idx + 1] + gray[idx + sampleW];
+                sumLap += lap;
+                sumLapSq += lap * lap;
+                count++;
+            }
+        }
+
+        if (count === 0) return 0;
+        const mean = sumLap / count;
+        const variance = (sumLapSq / count) - (mean * mean);
+        return Math.max(0, variance);
+    }
+
+    let faceDetectionFailed = false;
+    async function detectFace(videoElement) {
+        faceDetectionFailed = false;
+        if (typeof faceapi === "undefined" || !faceApiLoaded) return null;
+        try {
+            if (landmarksLoaded) {
+                const faces = await faceapi.detectAllFaces(videoElement,
+                    new faceapi.TinyFaceDetectorOptions({inputSize: 320, scoreThreshold: 0.5})).withFaceLandmarks(true);
+                if (!faces.length) return null;
+                const first = faces[0];
+                return {...first.detection.box, x: first.detection.box.x, y: first.detection.box.y,
+                    width: first.detection.box.width, height: first.detection.box.height,
+                    score: first.detection.score, faceCount: faces.length,
+                    landmarks: first.landmarks.positions};
+            }
+            const detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }));
+            if (detection) {
+                const box = detection.box;
+                return { x: box.x, y: box.y, width: box.width, height: box.height, score: detection.score };
+            }
+        } catch (error) {
+            faceDetectionFailed = true;
+            if (landmarksLoaded) {
+                landmarksLoaded = false;
+                pauseAutomaticCapture('Capture paused because the pose guide is unavailable. Reload the page to try again.');
+            }
+        }
+        return null;
+    }
+
+    function setBadgeState(elem, pass, valText) {
+        const valSpan = elem.querySelector(".badge-val");
+        if (valSpan) valSpan.innerText = valText;
+        if (pass) {
+            // Live estimates use a neutral state. Green is reserved for images
+            // accepted by the server, rather than a promise of acceptance.
+            elem.style.background = "var(--color-bg-input)";
+            elem.style.color = "var(--color-text-primary)";
+            elem.style.borderColor = "var(--color-border)";
+        } else {
+            elem.style.background = "rgba(239, 68, 68, 0.15)";
+            elem.style.color = "var(--color-error)";
+            elem.style.borderColor = "rgba(239, 68, 68, 0.4)";
+        }
+    }
+
+    // Continuous Quality Loop with Dynamic Backend Configuration Sync (R4)
+    let lastQualityCheck = 0;
+    const QUALITY_CHECK_INTERVAL = 250; // ms; run analysis at ~4fps, not 60fps
+
+    async function checkQualityFrame() {
+        if (authExpired || pageRetired) return;
+        if (document.hidden) {
+            autoCaptureTracker.reset();
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+        syncEnrollmentIdentity();
+        renderCaptureSignal();
+        // Accepted photos no longer need live analysis. Keep identity checks active
+        // so editing the student details still invalidates the captured attempt.
+        if (capturedImages.every(img => img !== null) && !isReCapturing) {
+            qualityReady = false;
+            latestQualityFrame = null;
+            autoCaptureTracker.reset();
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+        const qualityGeneration = attemptGeneration;
+        const qualityCameraGeneration = cameraInitGeneration;
+        const activeMedia = videoSourceSelect.value === "cctv" ? cctvImg : video;
+        if (!streamActive) {
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+        if (videoSourceSelect.value === "webcam" && (video.paused || video.ended)) {
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+        if (videoSourceSelect.value === "cctv" && (!cctvImg.complete || cctvImg.naturalWidth === 0)) {
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+
+        // Throttle heavy analysis to ~4fps
+        const now = performance.now();
+        if (now - lastQualityCheck < QUALITY_CHECK_INTERVAL) {
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+        lastQualityCheck = now;
+
+        const config = window.ENROLLMENT_CONFIG || {};
+        const minBrightness = typeof config.min_brightness === "number" ? config.min_brightness : 45.0;
+        const maxBrightness = typeof config.max_brightness === "number" ? config.max_brightness : 220.0;
+        const minBlurVariance = typeof config.min_blur_variance === "number" ? config.min_blur_variance : 40.0;
+
+        const frameW = activeMedia.videoWidth || activeMedia.naturalWidth || 640;
+        const frameH = activeMedia.videoHeight || activeMedia.naturalHeight || 480;
+
+        const offCanvas = document.createElement("canvas");
+        offCanvas.width = frameW;
+        offCanvas.height = frameH;
+        const offCtx = offCanvas.getContext("2d");
+        offCtx.save();
+        if (activeMedia === cctvImg && cctvRotateCheckbox && cctvRotateCheckbox.checked) {
+            offCtx.translate(frameW, frameH);
+            offCtx.rotate(Math.PI);
+        }
+        offCtx.drawImage(activeMedia, 0, 0, frameW, frameH);
+        offCtx.restore();
+
+        const imgData = offCtx.getImageData(0, 0, frameW, frameH);
+        
+        // 1. Light Badge (Luminance Y in [minBrightness, maxBrightness])
+        const luminance = computeLuminance(imgData);
+        const passLight = (luminance >= minBrightness && luminance <= maxBrightness);
+        setBadgeState(badgeLight, passLight, passLight ? `OK (${Math.round(luminance)})` : `Low/High (${Math.round(luminance)})`);
+
+        // 2. Sharpness Badge (Laplacian Variance >= minBlurVariance)
+        const lapVar = computeLaplacianVariance(offCtx, frameW, frameH);
+        const passSharpness = (lapVar >= minBlurVariance);
+        setBadgeState(badgeSharpness, passSharpness, passSharpness ? `OK (${Math.round(lapVar)})` : `Blurry (${Math.round(lapVar)})`);
+
+        // 3. Face Found & 4. Centered Badges
+        const faceBox = await detectFace(offCanvas, offCtx, frameW, frameH);
+        // A face result can outlive a reset, source switch, request or redirect.
+        if (authExpired || pageRetired || qualityCameraGeneration !== cameraInitGeneration) return;
+        if (!syncEnrollmentIdentity() || qualityGeneration !== attemptGeneration || !streamActive) {
+            animFrameId = requestAnimationFrame(checkQualityFrame);
+            return;
+        }
+
+        let passFaceFound = false;
+        let passCentered = false;
+        let passFaceSize = false;
+        let framing = null;
+        let faceMessage = !faceApiLoaded || faceDetectionFailed
+            ? "Face detector unavailable. Reload the page to retry."
+            : "Look toward the lens with your whole face visible";
+
+        if (overlayCtx) {
+            // Match the actual cover-cropped viewport, not the source aspect ratio.
+            overlayCanvas.width = Math.round(activeMedia.clientWidth);
+            overlayCanvas.height = Math.round(activeMedia.clientHeight);
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        }
+
+        guideFaceBox = null;
+        if (faceBox && faceBox.score > 0.5 && (faceBox.faceCount === undefined || faceBox.faceCount === 1)) {
+            passFaceFound = true;
+            setBadgeState(badgeFace, true, `Found (${Math.round(faceBox.score * 100)}%)`);
+
+            framing = window.EnrollmentFraming.evaluate(faceBox, frameW, frameH,
+                activeMedia.clientWidth, activeMedia.clientHeight, {
+                    mirror: activeMedia === video,
+                    minFaceAreaRatio: config.min_face_area_ratio,
+                    minEdgeMarginRatio: config.min_edge_margin_ratio,
+                });
+            passCentered = framing.positionOk;
+            passFaceSize = framing.sizeOk;
+            setBadgeState(badgeCentered, passCentered, passCentered ? "Centered" : "See preview guidance");
+            setBadgeState(badgeFaceSize, passFaceSize, framing.sizeText);
+
+            guideFaceBox = framing.box;
+        } else {
+            if (faceBox && faceBox.faceCount > 1) faceMessage = 'Only one person should be in view.';
+            setBadgeState(badgeFace, false, faceBox && faceBox.faceCount > 1 ? 'Multiple faces' : !faceApiLoaded || faceDetectionFailed ? "Unavailable" : "Searching...");
+            setBadgeState(badgeCentered, false, "No Face");
+            setBadgeState(badgeFaceSize, false, "Waiting for a face");
+        }
+
+        const allBadgesPass = passLight && passSharpness && passFaceFound && passCentered && passFaceSize;
+        const orientation = window.EnrollmentAutoCapture.estimateOrientation(faceBox && faceBox.landmarks);
+        const desiredPose = ['center', 'left', 'right'][currentPoseStep];
+        const poseMatches = orientation.available && orientation.level && orientation.orientation === desiredPose;
+        setBadgeState(badgePose, poseMatches, !landmarksLoaded ? 'Pose guide unavailable'
+            : !orientation.available ? 'Waiting for a face'
+            : !orientation.level ? 'Keep your head upright'
+            : poseMatches ? 'Approximate angle aligned' : `Look ${desiredPose === 'center' ? 'at the lens' : 'slightly ' + desiredPose}`);
+
+        // Visual feedback on guide boundary
+        if (faceGuide) {
+            if (allBadgesPass) {
+                faceGuide.style.border = "2px solid #F59E0B";
+                faceGuide.style.boxShadow = "0 0 0 9999px rgba(0,0,0,0.3)";
+                guideDot.style.background = "#F59E0B";
+                guideText.innerText = orientation.available && !poseMatches
+                    ? !orientation.level ? 'Keep your head upright' : poseConfig[currentPoseStep].instruction
+                    : 'Hold still. You can capture this photo now.';
+            } else {
+                faceGuide.style.border = "2px dashed rgba(239, 68, 68, 0.7)";
+                faceGuide.style.boxShadow = "0 0 0 9999px rgba(0,0,0,0.35)";
+                guideDot.style.background = "var(--color-error)";
+                
+                if (!passFaceFound) guideText.innerText = faceMessage;
+                else if (!passCentered) guideText.innerText = framing.positionText;
+                else if (!passFaceSize) guideText.innerText = framing.sizeText;
+                else if (!passLight) guideText.innerText = "Adjust lighting (too dark or bright)";
+                else if (!passSharpness) guideText.innerText = "Hold steady (camera is blurry)";
+            }
+        }
+
+        // Both shutters require the same fresh, correctly posed, stable sample.
+        const decision = autoCaptureTracker.update({enabled: !isValidating && !enrollmentPending,
+            now: performance.now(), capturedAt: now, pose: currentPoseStep,
+            qualityReady: allBadgesPass, detectionScore: faceBox && faceBox.score,
+            faceCount: faceBox && faceBox.faceCount, faceBox,
+            landmarks: faceBox && faceBox.landmarks,
+            sourceKey: `${cameraInitGeneration}:${attemptGeneration}`});
+        const stableReady = decision.ready || decision.reason === 'complete';
+        const detailsReady = ['student_id', 'name', 'program_id', 'year_level']
+            .every(id => document.getElementById(id).value.trim()) && document.getElementById('consent_granted').checked;
+        qualityReady = stableReady && detailsReady && landmarksLoaded;
+        latestQualityFrame = qualityReady ? {canvas: offCanvas, capturedAt: now,
+            generation: qualityGeneration, cameraGeneration: qualityCameraGeneration} : null;
+        armQualityExpiry(latestQualityFrame);
+        const readinessMessage = !landmarksLoaded || decision.reason === 'landmarks_unavailable'
+            ? 'Head angle cannot be checked yet. Wait for the pose guide or reconnect the camera.'
+            : !allBadgesPass ? guideText.innerText : decision.message;
+        liveCaptureSignal = !detailsReady
+            ? ['adjust', 'Complete student details', 'Fill in all details and verify consent before capturing.']
+            : qualityReady ? ['ready', 'Ready to capture', 'Picture and steady hold checked. The server still checks the captured photo.']
+            : decision.eligible ? ['hold', `Hold still · ${Math.ceil(decision.countdownRemainingMs / 1000)}`, 'Keep this pose until the panel turns green.']
+            : ['adjust', 'Adjust position', readinessMessage];
+        if (isValidating || enrollmentPending) {
+            // Preserve loading UI state during async validation or enrollment fetch
+        } else if (capturedImages.every(img => img !== null) && !isReCapturing) {
+            // All 3 poses valid -> enable button for final submission
+            captureBtn.disabled = false;
+            captureBtn.style.opacity = "1";
+            captureBtn.style.cursor = "pointer";
+        } else {
+            // Pose step capture relies on live badge pass
+            captureBtn.disabled = !qualityReady;
+            captureBtn.style.opacity = qualityReady ? "1" : "0.5";
+            captureBtn.style.cursor = qualityReady ? "pointer" : "not-allowed";
+        }
+
+        updateAutomaticCaptureUI();
+        if (automaticCaptureArmed && !isValidating && !enrollmentPending) {
+            const message = decision.eligible
+                ? `Hold ${poseConfig[currentPoseStep].name.toLowerCase()} still. Capturing in ${Math.ceil(decision.countdownRemainingMs / 1000)}...`
+                : decision.message;
+            setAutomaticStatus(message);
+            if (guideText) guideText.innerText = message;
+            if (decision.ready && latestQualityFrame && !captureBtn.disabled) {
+                automaticCaptureTrigger = true;
+                captureBtn.click();
+                automaticCaptureTrigger = false;
+            }
+        }
+        renderCaptureSignal();
+        animFrameId = requestAnimationFrame(checkQualityFrame);
+    }
+
+    function startQualityLoop() {
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        animFrameId = requestAnimationFrame(checkQualityFrame);
+    }
+
+    // Update Wizard UI Step (R2 & R3)
+    function updateWizardUI() {
+        const config = poseConfig[currentPoseStep];
+        const allValid = capturedImages.every(img => img !== null);
+        const reviewing = allValid && !isReCapturing;
+        wizardStepTitle.innerText = reviewing ? 'Review your 3 photos' : config.title;
+        wizardStepInstruction.innerText = reviewing
+            ? 'Check that each photo is clear and shows the intended student. Select Retake on a photo to replace only that one.'
+            : config.instruction;
+        document.getElementById('camera-step-instruction').innerText = reviewing
+            ? 'Photos ready. Review them before submitting.' : config.instruction;
+        document.getElementById('capture-quality-details').hidden = reviewing;
+        document.getElementById('capture-help').hidden = reviewing;
+        faceGuide.style.display = reviewing ? 'none' : '';
+        document.getElementById('overlay-canvas').style.display = reviewing ? 'none' : '';
+        document.getElementById('guide-status-banner').style.display = reviewing ? 'none' : 'flex';
+        const finalSubmitLabel = updatingBiometrics ? "Save Updated Face Enrollment" : teacherRequiresApproval
+            ? "Submit 3-Pose Request for Approval" 
+            : "Complete & Enroll Student";
+
+        if (allValid && !isReCapturing) {
+            captureBtn.innerText = finalSubmitLabel;
+        } else {
+            captureBtn.innerText = config.btnLabel;
+        }
+        const canCapture = !authExpired && !pageRetired && streamActive && !isValidating && !enrollmentPending
+            && (allValid && !isReCapturing || qualityReady);
+        captureBtn.disabled = !canCapture;
+        captureBtn.style.opacity = canCapture ? "1" : "0.5";
+        captureBtn.style.cursor = canCapture ? "pointer" : "not-allowed";
+
+        stepPill0.style.background = (currentPoseStep >= 0 || capturedImages[0] !== null) ? "var(--color-accent)" : "var(--color-border)";
+        stepPill1.style.background = (currentPoseStep >= 1 || capturedImages[1] !== null) ? "var(--color-accent)" : "var(--color-border)";
+        stepPill2.style.background = (currentPoseStep >= 2 || capturedImages[2] !== null) ? "var(--color-accent)" : "var(--color-border)";
+
+        for (let i = 0; i < 3; i++) {
+            const card = document.getElementById(`thumb-card-${i}`);
+            if (card) {
+                card.disabled = authExpired || pageRetired || enrollmentPending;
+                card.setAttribute('aria-label', `${capturedImages[i] ? 'Retake' : 'Capture'} ${poseConfig[i].name} pose`);
+                card.setAttribute('aria-current', !reviewing && i === currentPoseStep ? 'step' : 'false');
+                if (!reviewing && i === currentPoseStep) {
+                    card.classList.add("active");
+                    card.style.borderColor = "var(--color-accent)";
+                    card.style.borderWidth = "2px";
+                    card.style.boxShadow = "0 0 0 2px rgba(99, 102, 241, 0.3)";
+                } else {
+                    card.classList.remove("active");
+                    card.style.borderColor = "var(--color-border)";
+                    card.style.borderWidth = "1px";
+                    card.style.boxShadow = "none";
+                }
+            }
+            renderThumbnail(i);
+        }
+
+        resetPosesBtn.style.display = (isValidating || capturedImages.some(img => img !== null)) ? "inline-block" : "none";
+        updateAutomaticCaptureUI();
+        renderCaptureSignal();
+    }
+
+    function setAutomaticStatus(message) {
+        if (autoCaptureStatus.innerText !== message) autoCaptureStatus.innerText = message;
+    }
+
+    function updateAutomaticCaptureUI() {
+        autoCaptureBtn.hidden = capturedImages.every(img => img !== null) && !isReCapturing;
+        autoCaptureBtn.innerText = automaticCaptureArmed ? 'Pause Automatic Capture' : 'Start Automatic Capture';
+        autoCaptureBtn.setAttribute('aria-pressed', automaticCaptureArmed ? 'true' : 'false');
+        autoCaptureBtn.disabled = authExpired || pageRetired || document.hidden || enrollmentPending
+            || !landmarksLoaded || !streamActive || (!automaticCaptureArmed && isValidating)
+            || capturedImages.every(img => img !== null);
+    }
+
+    function pauseAutomaticCapture(message = 'Automatic capture is off. Start when you are ready.') {
+        automaticCaptureArmed = false;
+        autoCaptureTracker.reset();
+        setAutomaticStatus(message);
+        updateAutomaticCaptureUI();
+    }
+
+    autoCaptureBtn.addEventListener('click', () => {
+        if (automaticCaptureArmed) {
+            pauseAutomaticCapture('Automatic capture paused. Start again when you are ready.');
+            if (activeCaptureRequest && activeCaptureRequest.automatic) retireCaptureRequest();
+            updateWizardUI();
+            return;
+        }
+        if (authExpired || pageRetired || document.hidden || enrollmentPending || isValidating
+                || !landmarksLoaded || !streamActive || capturedImages.every(img => img !== null)) return;
+        syncEnrollmentIdentity();
+        if (!document.getElementById('student_id').value.trim() || !document.getElementById('name').value.trim()
+                || !document.getElementById('program_id').value || !document.getElementById('year_level').value) {
+            showAlert('Fill in the student details before starting automatic capture.', true);
+            return;
+        }
+        if (!document.getElementById('consent_granted').checked) {
+            showAlert('Verify the signed biometric consent before starting automatic capture.', true);
+            return;
+        }
+        retireCaptureRequest();
+        automaticCaptureArmed = true;
+        alertBox.style.display = 'none';
+        setAutomaticStatus('Automatic capture is on. Follow the pose guide and hold still.');
+        updateAutomaticCaptureUI();
+    });
+
+    // Reset Poses
+    resetPosesBtn.addEventListener("click", resetCaptureAttempt);
+    document.getElementById('start-next-enrollment-camera').addEventListener('click', () => {
+        if (authExpired || pageRetired || enrollmentPending || isValidating) return;
+        initCamera();
+    });
+
+    // Capture & Immediate Per-Pose Validation / Final Submission Logic (R2)
+    captureBtn.addEventListener("click", async () => {
+        if (!syncEnrollmentIdentity() || authExpired || pageRetired || enrollmentPending || !streamActive || captureBtn.disabled || isValidating) return;
+        const usingAutomaticCapture = automaticCaptureTrigger;
+        if (!usingAutomaticCapture && automaticCaptureArmed) {
+            pauseAutomaticCapture('Automatic capture paused for manual capture.');
+        }
+
+        const studentId = document.getElementById("student_id").value.trim();
+        const name = document.getElementById("name").value.trim();
+        const programId = document.getElementById("program_id").value;
+        const yearLevel = document.getElementById("year_level").value;
+        const consent = document.getElementById("consent_granted").checked;
+
+        // Front-end validation
+        if (!studentId || !name || !programId || !yearLevel) {
+            showAlert("Please fill in the Student ID, Full Name, Academic Program, and Year Level.", true);
+            return;
+        }
+        if (!consent) {
+            showAlert("You must verify that the biometric data waiver has been signed.", true);
+            return;
+        }
+
+        const allValid = capturedImages.every(img => img !== null);
+        const isFinalSubmitMode = allValid && !isReCapturing;
+
+        if (isFinalSubmitMode) {
+            // The automatic shutter can only validate poses, never submit a registration.
+            if (usingAutomaticCapture) return;
+            // All 3 poses are valid: submit final enrollment request
+            isValidating = true;
+            enrollmentPending = true;
+            const request = {generation: attemptGeneration, studentLabel: `${name} (${studentId})`};
+            activeCaptureRequest = request;
+            updateWizardUI();
+            captureBtn.disabled = true;
+            captureBtn.style.opacity = "0.7";
+            captureBtn.style.cursor = "wait";
+            captureBtn.innerText = "Processing 3-Pose Enrollment...";
+            alertBox.style.display = "none";
+            showSubmissionStatus(request, 'pending');
+
+            try {
+                const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+                const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
+
+                const response = await fetch("{{ url_for('students.api_student_biometrics_reenroll', student_id=reenrollment.id) if reenrollment else url_for('students.api_student_enroll') }}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrfToken
+                    },
+                    body: JSON.stringify(updatingBiometrics ? {
+                        consent_granted: consent,
+                        images_base64: capturedImages
+                    } : {
+                        student_id: studentId,
+                        name: name,
+                        program_id: programId,
+                        year_level: yearLevel,
+                        consent_granted: consent,
+                        resubmit_request_id: document.getElementById("resubmit-request-id").value || null,
+                        images_base64: capturedImages
+                    })
+                });
+
+                const data = await AuthResponse.readJson(response);
+                if (pageRetired || authExpired) return;
+                if (AuthResponse.redirectIfUnauthorized(response, data)) {
+                    expireEnrollment();
+                    return;
+                }
+                const outcome = response.ok && typeof data.message === 'string' && data.message.trim()
+                    ? 'success' : !response.ok && response.status >= 400 && response.status < 500 ? 'failure' : 'unknown';
+                const outcomeMessage = showSubmissionStatus(request, outcome, typeof data.error === 'string' ? data.error : '');
+                if (!requestIsCurrent(request)) return;
+
+                if (outcome === 'success') {
+                    showAlert(teacherRequiresApproval
+                        ? `${data.message} Open My Registration Requests to track the review.`
+                        : data.message, false);
+                    if (!updatingBiometrics) {
+                        document.getElementById("student_id").value = "";
+                        document.getElementById("name").value = "";
+                    }
+                    document.getElementById("consent_granted").checked = false;
+                    document.getElementById("resubmit-request-id").value = "";
+                    const correctionNotice = document.getElementById("registration-correction");
+                    if (correctionNotice) correctionNotice.hidden = true;
+                    // A completed write ends this capture session in every role.
+                    // Retire the stream generation so old health/renewal callbacks
+                    // cannot reconnect and compete with the closing preview.
+                    stopCamera();
+                    cameraOverlay.style.display = 'flex';
+                    setCameraStatus(updatingBiometrics
+                        ? 'Face enrollment saved. Camera preview stopped. Open Student Profile to review.'
+                        : 'Registration saved. Camera preview stopped. Start the camera again when enrolling the next student.');
+                    pauseAutomaticCapture('Registration saved. Camera preview and automatic capture are off.');
+                    document.getElementById('start-next-enrollment-camera').hidden = updatingBiometrics;
+                } else {
+                    showAlert(outcome === 'unknown' ? outcomeMessage : data.error || "Enrollment failed.", true);
+                }
+            } catch (error) {
+                const outcomeMessage = showSubmissionStatus(request, 'unknown');
+                if (!requestIsCurrent(request)) return;
+                console.error("Enrollment POST error:", error);
+                showAlert(outcomeMessage, true);
+            } finally {
+                // A sent enrollment may still commit on the server after a UI
+                // reset; keep its mutation lock until the response has settled.
+                enrollmentPending = false;
+                if (activeCaptureRequest === request) {
+                    activeCaptureRequest = null;
+                    isValidating = false;
+                }
+                updateWizardUI();
+            }
+            return;
+        }
+
+        // Per-Pose Immediate Backend Validation
+        const qualityFrame = latestQualityFrame;
+        if (!qualityFrame || qualityFrame.generation !== attemptGeneration
+                || qualityFrame.cameraGeneration !== cameraInitGeneration
+                || performance.now() - qualityFrame.capturedAt > QUALITY_FRAME_MAX_AGE_MS) {
+            qualityReady = false;
+            latestQualityFrame = null;
+            updateWizardUI();
+            showAlert("Wait for a fresh preview check, then hold still and try again.", true);
+            if (usingAutomaticCapture) pauseAutomaticCapture('Automatic capture paused. Wait for a fresh preview, then start again.');
+            return;
+        }
+        clearCaptureReview();
+        armQualityExpiry(null);
+        const activeMedia = videoSourceSelect.value === "cctv" ? cctvImg : video;
+        canvas.width = qualityFrame.canvas.width;
+        canvas.height = qualityFrame.canvas.height;
+        const ctx = canvas.getContext("2d");
+        ctx.save();
+        if (activeMedia === video) {
+            // Webcam: mirror horizontally for selfie view
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
+        // CCTV rotation was already applied to this exact analyzed frame.
+        ctx.drawImage(qualityFrame.canvas, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        const base64Image = canvas.toDataURL("image/jpeg", 0.85);
+        const poseName = poseConfig[currentPoseStep].name;
+        const targetPoseStep = currentPoseStep;
+        const request = {generation: ++attemptGeneration, controller: new AbortController(), automatic: usingAutomaticCapture};
+        activeCaptureRequest = request;
+
+        // Show loading UI state on #capture-btn (R2)
+        isValidating = true;
+        captureBtn.disabled = true;
+        captureBtn.style.opacity = "0.7";
+        captureBtn.style.cursor = "wait";
+        captureBtn.innerText = `Validating ${poseName}...`;
+        renderCaptureSignal();
+        if (usingAutomaticCapture) setAutomaticStatus(`Checking the captured ${poseName.toLowerCase()} image...`);
+        updateAutomaticCaptureUI();
+        resetPosesBtn.style.display = "inline-block";
+
+        try {
+            const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+            const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
+
+            const response = await fetch("/api/students/validate-pose", {
+                method: "POST",
+                signal: request.controller.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                body: JSON.stringify({
+                    pose_index: targetPoseStep,
+                    pose_name: poseName,
+                    image_base64: base64Image
+                })
+            });
+
+            const data = await AuthResponse.readJson(response);
+            if (pageRetired) return;
+            if (AuthResponse.redirectIfUnauthorized(response, data)) {
+                expireEnrollment();
+                return;
+            }
+            if (!requestIsCurrent(request)) return;
+
+            if (!response.ok || !data.valid) {
+                // If response is NOT ok (e.g., HTTP 400), display error, restore button, KEEP user on current step
+                const errorMessage = data && data.error === 'No face detected in the image. Please try again.'
+                    ? 'The captured image was not accepted: no clear face was detected. Face the lens and light your face from the front.'
+                    : (data && data.error) || "The captured image was not accepted. Please try again.";
+                showAlert(errorMessage, true);
+                liveCaptureSignal = ['error', 'Photo not accepted', errorMessage];
+                photoResultSignal = liveCaptureSignal;
+                photoResultUntil = performance.now() + 2000;
+                if (usingAutomaticCapture) pauseAutomaticCapture('Automatic capture paused after the image check. Adjust your position or lighting, then start again.');
+                captureReviewImage.src = base64Image;
+                captureReviewText.textContent = "This is the image sent for validation. Face the lens directly, keep your whole face visible, light your face from the front, and hold still before retrying. The live guide checks framing; this captured image must also pass registration validation.";
+                captureReview.hidden = false;
+                return;
+            }
+
+            // HTTP 200 OK (data.valid is true)
+            capturedImages[targetPoseStep] = base64Image;
+            renderThumbnail(targetPoseStep);
+            showAlert(`${poseName} image accepted.`, false);
+            photoResultSignal = ['accepted', `Photo ${targetPoseStep + 1} accepted`, 'This photo passed its check. Enrollment is not complete yet.'];
+            photoResultUntil = performance.now() + 1500;
+
+            isReCapturing = false;
+
+            // Advance to next incomplete pose index if any remaining
+            const nextIncomplete = capturedImages.findIndex(img => img === null);
+            if (nextIncomplete !== -1) {
+                currentPoseStep = nextIncomplete;
+            } else {
+                pauseAutomaticCapture('All three images are accepted. Review them, then use the submission button when ready.');
+            }
+            updateWizardUI();
+        } catch (error) {
+            if (!requestIsCurrent(request)) return;
+            console.error("Pose validation error:", error);
+            showAlert("Network error during pose validation.", true);
+            liveCaptureSignal = ['error', 'Photo check interrupted', 'Check the connection and try again.'];
+            photoResultSignal = liveCaptureSignal;
+            photoResultUntil = performance.now() + 2000;
+            if (usingAutomaticCapture) pauseAutomaticCapture('Automatic capture paused because the image check could not finish. Check the connection, then start again.');
+        } finally {
+            if (requestIsCurrent(request)) {
+                activeCaptureRequest = null;
+                isValidating = false;
+                // The next capture needs a quality result from its own step.
+                attemptGeneration += 1;
+                qualityReady = false;
+                latestQualityFrame = null;
+                autoCaptureTracker.reset();
+                updateWizardUI();
+            }
+        }
+    });
+
+    // Start Face API and Camera
+    initFaceApi();
+    fetchCameras().then((shouldInitialize) => {
+        if (shouldInitialize) initCamera();
+    });
+});
+</script>
+{% endblock %}

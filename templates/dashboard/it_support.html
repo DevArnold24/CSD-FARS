@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}IT Support -- CSD FARS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">IT Support Dashboard</h1>
+</div>
+
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">System Diagnostics</h2>
+    </div>
+    <div class="card__body">
+        <p>Check computer resources, camera availability and recognition logs.</p>
+        <div style="margin-top: 1rem;">
+            <a href="{{ url_for('diagnostics.diagnostics_index') }}" class="btn btn--primary">Go to Diagnostics</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

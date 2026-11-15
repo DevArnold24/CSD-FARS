@@ -1,0 +1,22 @@
+{% macro attendance_summary(metric, scope) %}
+<div class="attendance-summary">
+    <p><strong>{{ scope }}</strong></p>
+    {% if metric.completeness is not none %}
+    <p>Attendance recorded: <strong>{{ metric.explicit }} of {{ metric.expected }}</strong> student-session entries have a result.</p>
+    {% elif metric.unknown or metric.legacy_entries %}
+    <p>The complete attendance count cannot be confirmed from the saved history.</p>
+    {% else %}
+    <p>No expected attendance entries in this selection.</p>
+    {% endif %}
+    <p>{{ metric.counts.Pending }} Pending · {{ metric.counts.Excused }} Excused.</p>
+    {% if metric.rate is not none %}
+    <p>Final attendance rate: <strong>{{ metric.rate }}%</strong>.</p>
+    {% else %}
+    <p>A final attendance rate is not available for this selection. Attendance must be complete, its history confirmed, and at least one result must be Present, Late or Absent.</p>
+    {% endif %}
+    <details class="workflow-details"><summary>What these numbers mean</summary>
+        <p>Each entry is one student's attendance for one session. Recorded results include Present, Late, Absent and Excused. Pending means a result still needs to be recorded; it does not mean Absent. During attendance, these students are not yet marked. After attendance ends or is interrupted, check their results.</p>
+        <p>The final rate is (Present + Late) ÷ (Present + Late + Absent). Excused is separate. A session must be confirmed as ended before its results can contribute to a final rate.</p>
+    </details>
+</div>
+{% endmacro %}

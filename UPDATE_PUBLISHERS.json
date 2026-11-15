@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "publishers": [
+    {
+      "id": "17cb7249a6970ae2c41c44665ac11d0aa225b2f9edfdc5e1c38149b43c74219d",
+      "public_key": "UE5/UyNa7KVQOiJgkLb3xb9bn26N72b1Bz/VDHzUGPA=",
+      "label": "CSD Attendance Release Publisher"
+    }
+  ]
+}

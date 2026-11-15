@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Attendance Settings - CSD FARS{% endblock %}
+{% block content %}
+<div class="page-header"><div class="page-header__content">
+    <h1 class="page-header__title">Attendance Settings</h1>
+    <p class="page-header__subtitle">Set when teachers may begin attendance before class. Only the Dean can change this setting.</p>
+</div></div>
+<section class="card settings-panel">
+    <h2>Early attendance opening</h2>
+    <p>How many minutes before class may teachers start attendance?</p>
+    <form id="opening-form" data-school-offset="{{ school_utc_offset }}" class="settings-form">
+        <div class="form-group">
+        <label for="opening-minutes" class="form-label">Minutes before class</label>
+        <input id="opening-minutes" class="form-input opening-minutes" type="number" min="0" max="30" step="1" required aria-describedby="opening-help opening-preview" disabled>
+        <p id="opening-help" class="field-help">Choose 0–30 whole minutes. Choose 0 to allow attendance only from the scheduled class time.</p>
+        </div>
+        <p id="opening-current" class="saved-setting">Loading the saved setting…</p>
+        <p id="opening-preview" class="field-help" aria-live="polite"></p>
+        <p class="field-help">Applies to both manual and camera attendance. Teachers still choose when to start.</p>
+        <details class="workflow-details"><summary>How changes affect sessions</summary>
+        <p>Changes apply before a Start is accepted. Sessions already starting, running or interrupted keep their original times and recovery rules. The late time and attendance end do not change.</p></details>
+        <p id="opening-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div style="display:flex;gap:var(--space-sm);flex-wrap:wrap;">
+            <button id="opening-save" type="submit" class="btn btn--primary" disabled>Save changes</button>
+            <button id="opening-refresh" type="button" class="btn btn--secondary">Check saved setting</button>
+        </div>
+    </form>
+    <noscript>JavaScript is required to confirm saves and show current settings. No change has been submitted.</noscript>
+</section>
+<section class="card settings-panel">
+    <h2>Recent changes</h2>
+    <p>Last 20 saved changes. <span id="opening-timezone">School-local time.</span> Full history remains in the audit records.</p>
+    <div class="responsive-table-region" style="overflow-x:auto;" tabindex="0" role="region" aria-label="Attendance opening change history">
+        <table class="table" style="width:100%;text-align:left;"><thead><tr><th>Time</th><th>Changed by</th><th>Previous</th><th>New setting</th></tr></thead>
+        <tbody id="opening-history"></tbody></table>
+    </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/attendance-settings.js') }}"></script>
+{% endblock %}

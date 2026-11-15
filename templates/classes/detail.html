@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "classes/_schedule_time.html" import schedule_time %}
+{% block title %}Class Details - {{ class_info.course_name }} - CSD FARS{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-md);">
+        <div>
+            <h2>{{ class_info.course_name }}</h2>
+            <p class="text-muted">{{ class_info.class_code }} • {{ class_info.section }}</p>
+        </div>
+        <a href="{{ url_for('manage_classes') }}" class="btn btn--secondary">Back to Classes</a>
+    </div>
+</div>
+
+<section class="card" aria-labelledby="class-attendance-heading" style="padding: var(--space-lg); margin-top: var(--space-lg);">
+    <h3 id="class-attendance-heading">Attendance</h3>
+    {% if class_info.is_archived %}
+    <p class="text-muted">This class is archived. Its attendance history remains available below.</p>
+    {% else %}
+    <p class="text-muted"><strong>Attendance availability:</strong> {{ session_availability.message }}</p>
+    {% if has_permission('run_attendance_session') and class_info.teacher_id == session.get('user_id') %}
+    <p class="text-muted">Open the attendance workspace to check readiness, start or resume a session, and monitor attendance.</p>
+    {% else %}
+    <p class="text-muted">The assigned teacher, {{ class_info.teacher_name }}, starts and monitors attendance from their account.</p>
+    {% endif %}
+    <div style="display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md);">
+        {% if session_availability.report_session_id %}
+        <a href="{{ url_for('classes.class_session_report', class_id=class_info.id, attendance_session_id=session_availability.report_session_id) }}" class="btn btn--secondary">View Saved Attendance Report</a>
+        {% endif %}
+        {% if has_permission('run_attendance_session') and class_info.teacher_id == session.get('user_id') %}
+        <a href="{{ url_for('classes.class_session', class_id=class_info.id) }}" class="btn btn--primary">Open Attendance Workspace</a>
+        {% endif %}
+        <a href="{{ url_for('classes.edit_class', class_id=class_info.id) }}" class="btn btn--secondary">{{ 'Edit Class' if session.role == 'Dean' else 'Late marking' }}</a>
+    </div>
+    {% endif %}
+</section>
+
+<div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); margin-top: var(--space-lg);">
+    <h3 style="margin-bottom: var(--space-md); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-sm);">Class Information</h3>
+
+    <div class="grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);">
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Course Name</strong>
+            <span>{{ class_info.course_name }}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Class Code</strong>
+            <span>{{ class_info.class_code }}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Section</strong>
+            <span>{{ class_info.section }}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Schedule</strong>
+            <span>{{ class_info.days_of_week | replace(',', ', ') }}<br>{{ schedule_time(class_info.start_time) }}{% if class_info.end_time %} – {{ schedule_time(class_info.end_time) }}{% else %} (end time not set){% endif %}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Late Threshold</strong>
+            <span>{% if class_info.late_threshold_minutes is not none %}{{ class_info.late_threshold_minutes }} minutes after the scheduled start{% else %}Not set{% endif %}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Official Room</strong>
+            <span>{% if class_info.room_code %}Room {{ class_info.room_code }}{% else %}{{ class_info.room_number }}{% endif %}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Camera Assignment</strong>
+            <span>{{ class_info.camera_name or 'No camera assigned. Manual attendance available.' }}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Teacher</strong>
+            <span>{{ class_info.teacher_name }}</span>
+        </div>
+        <div>
+            <strong style="display: block; font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 4px;">Enrolled Students</strong>
+            <span>{{ class_info.enrolled_count }}</span>
+        </div>
+    </div>
+    {% with pending_schedule=class_info.pending_schedule %}{% include 'classes/_pending_schedule.html' %}{% endwith %}
+    {% if not class_info.is_archived and has_permission('manage_rosters') and (session.get('role') == 'Dean' or class_info.teacher_id == session.get('user_id')) %}
+    <div class="mt-md">
+        {% if class_info.enrolled_count == 0 %}
+        <p class="text-muted">No students are enrolled yet. Add students before starting attendance.</p>
+        {% endif %}
+        <a href="{{ url_for('classes.class_enrollments', class_id=class_info.id) }}" class="btn btn--primary mt-sm">Manage Enrollments</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); margin-top: var(--space-lg);">
+    <h3 style="margin-bottom: var(--space-md); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-sm);">Recent Session History</h3>
+
+    {% if sessions %}
+    <div class="responsive-table-region" role="region" aria-label="Scrollable recent session history" tabindex="0">
+    <table class="table class-session-history-table" aria-label="Recent session history" style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+            <tr>
+                <th style="padding: var(--space-sm); border-bottom: 1px solid var(--color-border); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Date</th>
+                <th style="padding: var(--space-sm); border-bottom: 1px solid var(--color-border); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Scheduled Start</th>
+                <th style="padding: var(--space-sm); border-bottom: 1px solid var(--color-border); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for session in sessions %}
+            <tr>
+                <td style="padding: var(--space-sm); border-bottom: 1px solid var(--color-border);"><a href="{{ url_for('classes.class_session_report', class_id=class_info.id, attendance_session_id=session.id) }}" aria-label="View attendance report for {{ session.scheduled_date }}">{{ session.scheduled_date }}</a></td>
+                <td style="padding: var(--space-sm); border-bottom: 1px solid var(--color-border);">{{ schedule_time(session.scheduled_start_time) }}</td>
+                <td style="padding: var(--space-sm); border-bottom: 1px solid var(--color-border);">
+                    <span class="badge badge--{{ session.tone }}">{{ session.label }}</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="text-muted">No sessions have been recorded for this class yet.</p>
+    {% endif %}
+
+    <div style="margin-top: var(--space-md);">
+        <a href="{{ url_for('classes.class_session_history', class_id=class_info.id) }}" class="btn btn--secondary btn--sm">View Full History</a>
+    </div>
+</div>
+{% endblock %}

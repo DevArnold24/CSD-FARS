@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+{% block title %}Academic Programs Settings - CSD FARS{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h2>Academic programs</h2>
+    <p class="text-muted">Maintain Computer Studies Department programs used for student enrollment.</p>
+</div>
+
+<p id="programEditStatus" role="status" aria-live="polite" aria-atomic="true" hidden style="margin-top: var(--space-md); overflow-wrap: anywhere;"></p>
+
+<div class="grid responsive-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-xl); margin-top: var(--space-lg);">
+    <!-- Add Program Form -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); height: fit-content;">
+        <h3 style="margin-bottom: var(--space-md);">Add New Program</h3>
+        <form id="createProgramForm" method="POST" action="{{ url_for('settings.manage_programs') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="name" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Program Name</label>
+                <input type="text" id="name" name="name" value="{{ form_name|default('') }}" required maxlength="120" autocomplete="off" placeholder="e.g. BS Computer Science"
+                       style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            </div>
+            
+            {% if form_error %}
+            <p id="program-create-error" class="flash flash--error" role="alert" tabindex="-1"><strong>No program was added.</strong> {{ form_error }} Your entry is still here.</p>
+            {% endif %}
+            <button id="createProgramSave" type="submit" class="btn btn--primary" style="width: 100%; background: var(--color-accent); color: white; padding: var(--space-sm) var(--space-md); border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: var(--font-weight-medium);">
+                Add Program
+            </button>
+        </form>
+    </div>
+
+    <!-- Programs List -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <h3 style="margin-bottom: var(--space-md);">Academic Programs</h3>
+        <p id="program-list-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        
+        <div class="responsive-table-region" role="region" aria-label="Scrollable academic programs" tabindex="0" style="overflow-x: auto;">
+            <table aria-label="Academic programs" style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead>
+                    <tr style="border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary);">
+                        <th style="padding: var(--space-sm) 0;">Program Name</th>
+                        <th style="padding: var(--space-sm) 0;">Students</th>
+                        <th style="padding: var(--space-sm) 0;">Status</th>
+                        <th style="padding: var(--space-sm) 0; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in programs %}
+                    {% set program_in_use = p.student_count or p.request_count|default(0) %}
+                    <tr id="program-row-{{ p.id }}" style="border-bottom: 1px solid var(--color-border);">
+                        <td id="program-name-{{ p.id }}" style="padding: var(--space-md) 0; font-weight: var(--font-weight-medium);">{{ p.name }}</td>
+                        <td style="padding: var(--space-md) 0; color: var(--color-text-muted);">{{ p.student_count }}</td>
+                        <td style="padding: var(--space-md) 0;">
+                            <span id="status-badge-{{ p.id }}" class="badge" style="padding: 4px 8px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium);
+                                   background: {% if p.is_active %}#ecfdf3{% else %}#fef2f2{% endif %};
+                                   color: {% if p.is_active %}var(--color-success){% else %}var(--color-error){% endif %};">
+                                {% if p.is_active %}Active{% else %}Inactive{% endif %}
+                            </span>
+                        </td>
+                        <td style="padding: var(--space-md) 0; text-align: right;">
+                            <button type="button" onclick="editProgram({{ p.id }}, this)" aria-describedby="program-name-{{ p.id }}" class="btn btn--secondary" style="padding: 4px 12px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); cursor: pointer; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary);">
+                                Edit
+                            </button>
+                            <button type="button" onclick="toggleProgramStatus({{ p.id }})" aria-describedby="program-name-{{ p.id }}" id="toggle-btn-{{ p.id }}" data-active="{{ 'true' if p.is_active else 'false' }}" class="btn btn--secondary" style="padding: 4px 12px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); cursor: pointer; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary);">
+                                {% if p.is_active %}Deactivate{% else %}Activate{% endif %}
+                            </button>
+                            <button type="button" onclick="deleteProgram({{ p.id }})" aria-describedby="program-name-{{ p.id }}" class="btn btn--secondary" {% if program_in_use %}disabled title="Programs referenced by students or registration requests cannot be deleted. Deactivate instead."{% endif %} style="padding: 4px 12px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); cursor: {% if program_in_use %}not-allowed{% else %}pointer{% endif %}; border: 1px solid var(--color-border); background: transparent; color: {% if program_in_use %}var(--color-text-muted){% else %}var(--color-error){% endif %};">
+                                Delete
+                            </button>
+                            <p id="program-action-{{ p.id }}" role="status" aria-live="polite" aria-atomic="true" hidden style="margin-top:var(--space-sm); max-width:28rem; text-align:left; overflow-wrap:anywhere;"></p>
+                            <a id="program-reload-{{ p.id }}" href="{{ url_for('settings.manage_programs') }}" hidden>Reload Saved Programs</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    <tr id="program-empty-row" {% if programs %}hidden{% endif %}>
+                        <td colspan="4" style="padding: var(--space-md) 0; text-align: center; color: var(--color-text-muted);">No programs configured.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="editProgramModal" role="dialog" aria-modal="true" aria-labelledby="editProgramTitle" aria-describedby="editProgramStatus" aria-hidden="true" tabindex="-1" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(15,23,42,0.35); backdrop-filter: blur(4px);">
+    <div style="background-color: var(--color-bg-card); margin: 12% auto; padding: var(--space-lg); border: 1px solid var(--color-border); width: min(420px, calc(100% - 32px)); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+            <h3 id="editProgramTitle" style="margin: 0;">Edit Program</h3>
+            <button type="button" onclick="closeEditProgramModal()" aria-label="Close edit program dialog" style="background: transparent; border: none; color: var(--color-text-secondary); font-size: 24px; font-weight: bold; cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+        <p id="editProgramStatus" role="status" aria-live="polite" aria-atomic="true" hidden style="margin-bottom: var(--space-md); overflow-wrap: anywhere;"></p>
+        <form id="editProgramForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" id="edit_program_id">
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="edit_program_name" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Program Name</label>
+                <input type="text" id="edit_program_name" required maxlength="120" autocomplete="off"
+                       style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            </div>
+            <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                <button type="button" onclick="closeEditProgramModal()" class="btn btn--secondary" style="background: transparent; border: 1px solid var(--color-border); color: var(--color-text-primary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); cursor: pointer;">Cancel</button>
+                <button type="submit" class="btn btn--primary" style="background: var(--color-accent); color: white; padding: var(--space-sm) var(--space-md); border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: var(--font-weight-medium);">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const editProgramModal = document.getElementById("editProgramModal");
+const editProgramForm = document.getElementById("editProgramForm");
+const editProgramName = document.getElementById("edit_program_name");
+const editProgramSave = editProgramForm.querySelector('button[type="submit"]');
+let editProgramReturnFocus = null;
+let editProgramGeneration = 0;
+let pendingProgramEdit = null;
+let programEditAuthExpired = false;
+let programPageRetired = false;
+let programEditNeedsRefresh = false;
+let programEditMessage = "";
+const programActionStates = new Map();
+let programRowCount = {{ programs|length }};
+
+const createProgramForm = document.getElementById('createProgramForm');
+const createProgramSave = document.getElementById('createProgramSave');
+const createProgramLabel = createProgramSave.innerText;
+let createProgramPending = false;
+const createProgramError = document.getElementById('program-create-error');
+if (createProgramError) createProgramError.focus();
+createProgramForm.addEventListener('submit', event => {
+    if (createProgramPending) { event.preventDefault(); return; }
+    if (event.defaultPrevented) return;
+    createProgramPending = true;
+    createProgramSave.disabled = true;
+    createProgramSave.innerText = 'Adding Program...';
+    createProgramForm.setAttribute('aria-busy', 'true');
+});
+window.addEventListener('pageshow', () => {
+    createProgramPending = false;
+    createProgramSave.disabled = false;
+    createProgramSave.innerText = createProgramLabel;
+    createProgramForm.setAttribute('aria-busy', 'false');
+});
+
+async function programRequest(url, options) {
+    const controller = new AbortController();
+    let timeout;
+    try {
+        const result = (async () => {
+            const response = await fetch(url, {...options, signal: controller.signal});
+            const data = await AuthResponse.readJson(response);
+            return {response, data};
+        })();
+        const deadline = new Promise((_, reject) => {
+            timeout = setTimeout(() => {
+                controller.abort();
+                reject(new Error('Program request timed out.'));
+            }, 15000);
+        });
+        return await Promise.race([result, deadline]);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function showProgramAction(programId, message, error = false, uncertain = false) {
+    const feedback = document.getElementById(`program-action-${programId}`);
+    feedback.innerText = message;
+    feedback.hidden = false;
+    feedback.setAttribute('role', error ? 'alert' : 'status');
+    feedback.style.color = error ? 'var(--color-error)' : 'var(--color-text-secondary)';
+    document.getElementById(`program-reload-${programId}`).hidden = !uncertain;
+}
+
+function beginProgramAction(programId, message) {
+    const key = String(programId);
+    if (programEditAuthExpired || programPageRetired || programActionStates.has(key)
+        || (pendingProgramEdit && String(pendingProgramEdit.programId) === key)) return null;
+    const row = document.getElementById(`program-row-${programId}`);
+    if (!row) return null;
+    const state = {row, uncertain: false, buttons: [...row.querySelectorAll('button')].map(button => [button, button.disabled])};
+    programActionStates.set(key, state);
+    state.buttons.forEach(([button]) => { button.disabled = true; });
+    row.setAttribute('aria-busy', 'true');
+    showProgramAction(programId, message);
+    renderProgramEditState();
+    return state;
+}
+
+function finishProgramAction(programId, state) {
+    state.row.setAttribute('aria-busy', 'false');
+    if (!state.uncertain && !programEditAuthExpired && !programPageRetired) {
+        state.buttons.forEach(([button, disabled]) => { button.disabled = disabled; });
+        programActionStates.delete(String(programId));
+    }
+    renderProgramEditState();
+}
+
+function renderProgramEditState() {
+    const isOpen = editProgramModal.getAttribute("aria-hidden") === "false";
+    const pageStatus = document.getElementById("programEditStatus");
+    const dialogStatus = document.getElementById("editProgramStatus");
+    pageStatus.innerText = programEditMessage;
+    dialogStatus.innerText = programEditMessage;
+    pageStatus.hidden = !programEditMessage || isOpen;
+    dialogStatus.hidden = !programEditMessage || !isOpen;
+    editProgramSave.disabled = Boolean(pendingProgramEdit) || programEditAuthExpired || programPageRetired || programEditNeedsRefresh
+        || programActionStates.has(String(document.getElementById('edit_program_id').value));
+    editProgramSave.innerText = pendingProgramEdit ? "Saving..." : "Save Changes";
+    editProgramForm.setAttribute("aria-busy", pendingProgramEdit ? "true" : "false");
+}
+
+function currentProgramEdit(request) {
+    return request.generation === editProgramGeneration
+        && editProgramModal.getAttribute("aria-hidden") === "false"
+        && request.programId === document.getElementById("edit_program_id").value
+        && request.name === editProgramName.value.trim();
+}
+
+editProgramName.addEventListener("input", () => { editProgramGeneration += 1; });
+editProgramName.addEventListener("change", () => { editProgramGeneration += 1; });
+
+// Every program action shares the same expiry boundary so a late edit result
+// cannot compete with a redirect initiated by another action on this page.
+function handleProgramAuthResponse(response, data) {
+    if (programPageRetired || programEditAuthExpired) return true;
+    if (!AuthResponse.redirectIfUnauthorized(response, data)) return false;
+    programEditAuthExpired = true;
+    editProgramGeneration += 1;
+    programEditMessage = "Session expired. Sign in again, then check the program name before saving again.";
+    renderProgramEditState();
+    return true;
+}
+
+window.addEventListener("pagehide", () => {
+    programPageRetired = true;
+    editProgramGeneration += 1;
+    programEditMessage = "";
+    renderProgramEditState();
+});
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted && programPageRetired) window.location.reload();
+});
+
+function editProgram(programId, trigger) {
+    if (programEditAuthExpired || programPageRetired || programActionStates.has(String(programId))) return;
+    const nameCell = document.getElementById(`program-name-${programId}`);
+    if (!nameCell) return;
+
+    editProgramGeneration += 1;
+    editProgramReturnFocus = trigger || document.activeElement;
+    document.getElementById("edit_program_id").value = programId;
+    document.getElementById("edit_program_name").value = nameCell.innerText.trim();
+    editProgramModal.style.display = "block";
+    editProgramModal.setAttribute("aria-hidden", "false");
+    renderProgramEditState();
+    document.getElementById("edit_program_name").focus();
+}
+
+function closeEditProgramModal() {
+    editProgramGeneration += 1;
+    editProgramModal.style.display = "none";
+    editProgramModal.setAttribute("aria-hidden", "true");
+    if (editProgramReturnFocus?.isConnected) editProgramReturnFocus.focus();
+    editProgramReturnFocus = null;
+    renderProgramEditState();
+}
+
+editProgramModal.addEventListener("keydown", (event) => {
+    if (editProgramModal.getAttribute("aria-hidden") !== "false") return;
+    if (event.key === "Escape") {
+        event.preventDefault();
+        closeEditProgramModal();
+        return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(editProgramModal.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => !element.hidden && element.offsetParent !== null);
+    if (!focusable.length) {
+        event.preventDefault();
+        editProgramModal.focus();
+        return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!focusable.includes(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+});
+
+editProgramForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (pendingProgramEdit || programEditAuthExpired || programPageRetired || programEditNeedsRefresh
+        || editProgramModal.getAttribute("aria-hidden") !== "false") return;
+
+    const programId = document.getElementById("edit_program_id").value;
+    if (programActionStates.has(String(programId))) return;
+    const trimmedName = editProgramName.value.trim();
+    if (!trimmedName) return;
+
+    // A closed dialog does not cancel a sent write. Keep one write in flight
+    // while allowing the operator to open and prepare another draft.
+    const request = {programId, name: trimmedName, generation: editProgramGeneration};
+    const row = document.getElementById(`program-row-${programId}`);
+    request.actionButtons = [...row.querySelectorAll('button')]
+        .filter(button => !(button.getAttribute('onclick') || '').startsWith('editProgram('))
+        .map(button => [button, button.disabled]);
+    request.actionButtons.forEach(([button]) => { button.disabled = true; });
+    pendingProgramEdit = request;
+    programEditMessage = `Saving "${trimmedName}". Closing this dialog will not cancel the save. Wait for the result before saving again.`;
+    renderProgramEditState();
+
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const {response, data} = await programRequest(`/api/programs/${programId}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken
+            },
+            body: JSON.stringify({ name: trimmedName })
+        });
+        if (handleProgramAuthResponse(response, data)) return;
+
+        if (response.ok && typeof data.name === "string" && data.name.trim()) {
+            const nameCell = document.getElementById(`program-name-${programId}`);
+            if (nameCell) nameCell.innerText = data.name;
+            if (currentProgramEdit(request)) {
+                programEditMessage = `Program saved as "${data.name}".`;
+                closeEditProgramModal();
+            } else {
+                programEditMessage = `Earlier save completed: "${data.name}".`;
+                if (editProgramModal.getAttribute("aria-hidden") === "false") {
+                    programEditMessage += " Your current draft has not been saved.";
+                }
+            }
+        } else if (response.ok || response.status >= 500) {
+            // An unreadable success or server error cannot prove the write
+            // failed. Require a fresh read instead of inviting a blind replay.
+            programEditNeedsRefresh = true;
+            programEditMessage = `Could not confirm whether "${trimmedName}" was saved. Reload this page and check the program name before saving again.`;
+        } else {
+            programEditMessage = `Save for "${trimmedName}" failed: ${data.error || "Failed to update program."}`;
+            if (!currentProgramEdit(request) && editProgramModal.getAttribute("aria-hidden") === "false") {
+                programEditMessage += " Your current draft has not been saved.";
+            }
+        }
+    } catch (err) {
+        if (programEditAuthExpired || programPageRetired) return;
+        console.error("Failed to update program:", err);
+        programEditNeedsRefresh = true;
+        programEditMessage = `Could not confirm whether "${trimmedName}" was saved. Reload this page and check the program name before saving again.`;
+    } finally {
+        if (pendingProgramEdit === request) pendingProgramEdit = null;
+        if (!programEditAuthExpired && !programPageRetired) {
+            if (programEditNeedsRefresh) {
+                programActionStates.set(String(programId), {uncertain:true});
+                row.querySelectorAll('button').forEach(button => { button.disabled = true; });
+                showProgramAction(programId, 'Could not confirm the saved program name. Reload saved programs before making another change.', true, true);
+            } else {
+                request.actionButtons.forEach(([button, disabled]) => { button.disabled = disabled; });
+            }
+        }
+        renderProgramEditState();
+    }
+});
+
+window.addEventListener("click", (event) => {
+    const modal = document.getElementById("editProgramModal");
+    if (event.target === modal) closeEditProgramModal();
+});
+
+async function deleteProgram(programId) {
+    const nameCell = document.getElementById(`program-name-${programId}`);
+    if (!nameCell || programEditAuthExpired || programPageRetired || programActionStates.has(String(programId))) return;
+
+    const programName = nameCell.innerText.trim();
+    AppModal.confirm(`Delete '${programName}'? Only unused programs can be deleted.`, async () => {
+        const state = beginProgramAction(programId, 'Deleting program...');
+        if (!state) return;
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const {response, data} = await programRequest(`/api/programs/${programId}`, {
+                method: "DELETE",
+                headers: {
+                    "X-CSRFToken": csrfToken
+                }
+            });
+            if (handleProgramAuthResponse(response, data)) return;
+
+            if (response.ok && typeof data.message === 'string') {
+                state.row.remove();
+                programRowCount -= 1;
+                document.getElementById('program-empty-row').hidden = programRowCount > 0;
+                document.getElementById('program-list-status').innerText = `Program "${programName}" deleted.`;
+            } else if (response.ok || response.status >= 500) {
+                state.uncertain = true;
+                showProgramAction(programId, 'Could not confirm whether this program was deleted. Reload saved programs before trying again.', true, true);
+            } else {
+                showProgramAction(programId, data.error || 'Failed to delete program.', true);
+            }
+        } catch (err) {
+            if (programEditAuthExpired || programPageRetired) return;
+            state.uncertain = true;
+            showProgramAction(programId, 'Could not confirm whether this program was deleted. Reload saved programs before trying again.', true, true);
+        } finally {
+            finishProgramAction(programId, state);
+        }
+    });
+}
+
+async function toggleProgramStatus(programId) {
+    const btn = document.getElementById(`toggle-btn-${programId}`);
+    const badge = document.getElementById(`status-badge-${programId}`);
+    if (!btn || !badge) return;
+
+    const state = beginProgramAction(programId, 'Saving program status...');
+    if (!state) return;
+    const desiredStatus = btn.getAttribute('data-active') !== 'true';
+
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const {response, data} = await programRequest(`/api/programs/${programId}/toggle`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken
+            },
+            body: JSON.stringify({is_active: desiredStatus})
+        });
+
+        if (handleProgramAuthResponse(response, data)) return;
+
+        if (response.ok && [true, false, 0, 1].includes(data.is_active)) {
+            const isActive = Boolean(data.is_active);
+            btn.setAttribute('data-active', isActive ? 'true' : 'false');
+
+            if (isActive) {
+                badge.innerText = "Active";
+                badge.style.background = "#ecfdf3";
+                badge.style.color = "var(--color-success)";
+                btn.innerText = "Deactivate";
+            } else {
+                badge.innerText = "Inactive";
+                badge.style.background = "#fef2f2";
+                badge.style.color = "var(--color-error)";
+                btn.innerText = "Activate";
+            }
+            showProgramAction(programId, data.message || (isActive ? 'Program activated.' : 'Program deactivated.'));
+        } else if (response.ok || response.status >= 500) {
+            state.uncertain = true;
+            showProgramAction(programId, 'Could not confirm the saved program status. Reload saved programs before trying again.', true, true);
+        } else {
+            showProgramAction(programId, data.error || 'Failed to update program status.', true);
+        }
+    } catch (err) {
+        if (programEditAuthExpired || programPageRetired) return;
+        state.uncertain = true;
+        showProgramAction(programId, 'Could not confirm the saved program status. Reload saved programs before trying again.', true, true);
+    } finally {
+        finishProgramAction(programId, state);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Diagnostics -- CSD FARS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">System Diagnostics</h1>
+</div>
+<div id="diagnostics-poll-status" class="flash flash--warning" role="status" aria-live="polite" hidden></div>
+
+<section class="card capacity-monitor" aria-labelledby="capacity-title">
+    <div class="card__header mobile-action-row">
+        <h2 id="capacity-title" class="card__title">Camera Capacity Monitor</h2>
+        <span id="capacity-status" class="badge badge--secondary" role="status">Waiting for readings</span>
+    </div>
+    <div class="card__body">
+        <p>See how this server handles the cameras currently in use. Processor and memory readings include other applications on this machine.</p>
+        <dl class="capacity-summary">
+            <div><dt>Enabled cameras</dt><dd id="capacity-configured">--</dd></div>
+            <div><dt>Recognition sessions</dt><dd id="capacity-sessions">--</dd></div>
+            <div><dt>Other camera use</dt><dd id="capacity-previews">--</dd></div>
+            <div><dt>Video views in use</dt><dd id="capacity-streams">--</dd></div>
+        </dl>
+        <p id="capacity-stream-detail" class="text-muted">Loading video viewing limit...</p>
+        <ul id="capacity-alerts" class="capacity-alerts" aria-label="Capacity warnings"></ul>
+        <p id="capacity-window" class="text-muted">Waiting for observations.</p>
+        <div class="table-scroll" role="region" aria-label="Camera performance, scroll horizontally for all readings" tabindex="0">
+            <table class="capacity-table">
+                <caption>Current recognition workers. Setup checks and enrollment previews appear in Other camera use.</caption>
+                <thead><tr><th scope="col">Camera / use</th><th scope="col">Status</th><th scope="col">Capture FPS</th><th scope="col">Preview FPS</th><th scope="col">Recognition FPS</th><th scope="col">Result age</th><th scope="col">Read failures / reconnects</th></tr></thead>
+                <tbody id="capacity-cameras"></tbody>
+            </table>
+        </div>
+        <p id="capacity-empty" class="text-muted">Waiting for camera readings.</p>
+        <details class="capacity-guidance">
+            <summary>How many cameras can this machine handle?</summary>
+            <p><strong>The machine's reliable camera limit has not been established.</strong> Add cameras gradually during a supervised test with representative people in view. Check recognition, frame delays and attendance controls through a full day at the intended load before accepting that camera count.</p>
+            <p>Warnings begin at 85% processor or memory use; 95% is very high load. Camera results older than 2 seconds are flagged. These are monitoring guidelines, not a guarantee of accuracy or a tested camera limit. Brief spikes may come from other applications.</p>
+            <p>The viewing-slot limit protects attendance controls. One camera can serve several views; a recognition camera can keep running with no open view. Slots therefore do not set the supported number of recognition cameras.</p>
+            <p>Recognition FPS includes tracking between detection passes. Result age starts at server capture and excludes delay inside the camera and browser. This monitor does not change recognition quality, thresholds or active sessions.</p>
+        </details>
+    </div>
+</section>
+
+<div class="diagnostics-grid responsive-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px;">
+    <!-- Hardware Monitoring Pane -->
+    <div class="card">
+        <div class="card__header">
+            <h2 class="card__title">Hardware Metrics</h2>
+        </div>
+        <div class="card__body">
+            <div style="margin-bottom: 24px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-weight: 500;">CPU Usage</span>
+                    <span id="cpu-text" style="font-weight: 600;">--</span>
+                </div>
+                <div style="background: var(--color-border); height: 12px; border-radius: 6px; overflow: hidden;">
+                    <div id="cpu-bar" role="progressbar" aria-label="CPU usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="height: 100%; background: var(--color-success); width: 0%; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                </div>
+            </div>
+
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-weight: 500;">RAM Usage</span>
+                    <span id="ram-text" style="font-weight: 600;">--</span>
+                </div>
+                <div style="background: var(--color-border); height: 12px; border-radius: 6px; overflow: hidden;">
+                    <div id="ram-bar" role="progressbar" aria-label="RAM usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="height: 100%; background: var(--color-success); width: 0%; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 24px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">Camera Status</span>
+                    <span id="camera-status" class="badge badge--secondary">Checking…</span>
+                </div>
+                <p id="camera-health-detail" class="text-muted">Loading camera observations...</p>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">Camera Device</span>
+                    <span id="camera-device-text" style="font-weight: 600;">--</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">Camera Room</span>
+                    <span id="camera-room-text" style="font-weight: 600;">--</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">Resolution</span>
+                    <span id="resolution-text" style="font-weight: 600;">--</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">Pipeline FPS</span>
+                    <span id="fps-text" style="font-weight: 600;">--</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--color-border);">
+                <h3 style="font-size: var(--font-size-base); margin-bottom: var(--space-md);">Room Camera Coverage</h3>
+                <div class="diagnostics-coverage-grid">
+                    <div><span>Total Rooms</span><strong id="coverage-total-rooms">--</strong></div>
+                    <div><span>No Camera</span><strong id="coverage-no-camera">--</strong></div>
+                </div>
+                <h3 style="font-size: var(--font-size-base); margin: var(--space-md) 0;">Active Camera Checks</h3>
+                <div class="diagnostics-coverage-grid">
+                    <div><span>Current</span><strong id="coverage-healthy">--</strong></div>
+                    <div><span>Needs Attention</span><strong id="coverage-failed">--</strong></div>
+                    <div><span>Stale</span><strong id="coverage-stale">--</strong></div>
+                    <div><span>Unchecked</span><strong id="coverage-not-tested">--</strong></div>
+                </div>
+                <p class="text-muted">Counts cover all active cameras. A setup check is current for 5 minutes; live attendance requires a fresh frame.</p>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">API Latency</span>
+                    <span id="latency-text" style="font-weight: 600;">-- ms</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--color-border);">
+                <h3 style="font-size: var(--font-size-base); margin-bottom: var(--space-md);">Pipeline Latency</h3>
+                <div class="diagnostics-latency-grid">
+                    <div><span>Stage</span><strong>Avg / Max</strong></div>
+                    <div><span>Read</span><strong id="latency-read">-- / -- ms</strong></div>
+                    <div><span>Preprocess</span><strong id="latency-preprocess">-- / -- ms</strong></div>
+                    <div><span>Detect</span><strong id="latency-detect">-- / -- ms</strong></div>
+                    <div><span>Liveness</span><strong id="latency-liveness">-- / -- ms</strong></div>
+                    <div><span>Encode Face</span><strong id="latency-encode-face">-- / -- ms</strong></div>
+                    <div><span>Match</span><strong id="latency-match">-- / -- ms</strong></div>
+                    <div><span>DB Write</span><strong id="latency-db-write">-- / -- ms</strong></div>
+                    <div><span>JPEG Encode</span><strong id="latency-jpeg-encode">-- / -- ms</strong></div>
+                    <div><span>Loop</span><strong id="latency-loop">-- / -- ms</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Logs Pane -->
+    <div class="card" style="display: flex; flex-direction: column; max-height: calc(100vh - 200px);">
+        <div class="card__header" style="flex-wrap: wrap; gap: var(--space-sm);">
+            <h2 class="card__title">System Events</h2>
+            {% if has_permission('view_technical_history') %}
+            <a class="btn btn--secondary" href="{{ url_for('diagnostics.system_operations') }}">Open Technical History</a>
+            {% endif %}
+        </div>
+        <div class="card__body" style="padding: 0; flex-grow: 1; background: #0f172a; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+            <div id="log-terminal" style="padding: 16px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; color: #7dd3fc; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;">
+                Fetching logs...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/capacity-monitor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/diagnostics.js') }}"></script>
+{% endblock %}

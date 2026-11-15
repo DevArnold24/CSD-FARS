@@ -1,0 +1,31 @@
+# Complete, version-predetermined Windows x64 / CPython 3.11 client input.
+# requirements.txt contains the application's exact direct pins.  Every active
+# transitive dependency for that target is pinned below as well, so the release
+# workflow cannot select a newer compatible package at build time.  Any package
+# update must revalidate and update this entire closure before building a new
+# offline wheelhouse and SHA-256-hashed requirements-client.lock.
+-r requirements.txt
+
+# Exact transitive closure validated for Windows x64 / CPython 3.11.16.
+blinker==1.9.0
+cffi==2.1.1
+click==8.5.0
+# Click 8.5 uses Colorama when it is available for legacy Windows console
+# handling.  Keep the validated Windows runtime behavior explicit even though
+# the 8.5.0 wheel no longer declares Colorama as a mandatory dependency.
+colorama==0.4.6
+et-xmlfile==2.0.0
+face-recognition-models==0.3.0
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+packaging==26.3
+Pillow==12.3.0
+pycparser==3.0
+WTForms==3.2.2
+
+# face_recognition_models imports pkg_resources at runtime.
+setuptools==80.10.2
+
+# Windows-supported production WSGI server used by the client start command.
+waitress==3.0.2

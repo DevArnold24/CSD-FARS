@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Dean Dashboard -- CSD FARS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Department overview</h1>
+    <p class="page-header__subtitle">Department-wide system status.</p>
+</div>
+
+{% if not classes %}
+<section class="card dashboard-setup" aria-labelledby="dashboard-setup-title">
+    <div class="card__header">
+        <h2 class="card__title" id="dashboard-setup-title">Set up your first class</h2>
+        <p class="card__subtitle">Start with staff access, then prepare the room and students.</p>
+    </div>
+    <ol class="dashboard-setup__steps">
+        <li><a href="{{ url_for('admin.admin_users') }}">Create staff accounts</a> to add a Teacher to run attendance. Add Office Admin or IT Support accounts if needed.</li>
+        <li><a href="{{ url_for('settings.manage_locations') }}">Add a room</a>, then <a href="{{ url_for('settings.manage_cameras') }}">set up its camera</a>.</li>
+        <li><a href="{{ url_for('students.student_registration') }}">Register consenting students</a> for the class roster.</li>
+        <li><a href="{{ url_for('classes.manage_classes') }}">Create a class and add its roster</a>. The assigned Teacher signs in to start attendance.</li>
+    </ol>
+</section>
+{% endif %}
+
+<div class="card" style="margin-bottom: 2rem;">
+    <div class="card__body metric-grid">
+        <div class="metric-card">
+            <span class="metric-value">{{ active_count }}</span>
+            <p class="metric-label">Active Live Sessions</p>
+        </div>
+        <div class="metric-card">
+            <span class="metric-value">{{ classes|length }}</span>
+            <p class="metric-label">Current Teacher-assigned Classes</p>
+        </div>
+        <div class="metric-card">
+            {% if attendance_rate is none %}
+            <span class="metric-value metric-value--empty">{% if attendance.counts.values()|sum == 0 %}No attendance recorded yet{% else %}N/A{% endif %}</span>
+            {% else %}
+            <span class="metric-value">{{ attendance_rate }}%</span>
+            {% endif %}
+            <p class="metric-label">Today's Final Attendance Rate</p>
+        </div>
+        <div class="metric-card">
+            {% set health = camera_health|default({'label': 'Unknown', 'tone': 'neutral', 'detail': 'Camera health has not been checked.'}, true) %}
+            <span class="metric-value{% if health.tone in ['success', 'warning'] %} metric-value--{{ health.tone }}{% endif %}" aria-describedby="camera-health-detail">{{ health.label }}</span>
+            <p class="metric-label">Camera Health</p>
+        </div>
+    </div>
+    <p id="camera-health-detail" class="text-muted" style="padding: 0 var(--space-xl) var(--space-lg); margin: 0;">{{ health.detail }}</p>
+    <div class="card__body">{% from 'includes/attendance_summary.html' import attendance_summary %}
+    {{ attendance_summary(attendance, 'Today, all department classes') }}
+    <a href="{{ url_for('reports.reports_index') }}">Review reports</a></div>
+</div>
+
+{% include 'classes/_session_links.html' %}
+
+<div class="card">
+    <div class="card__header mobile-stack-header">
+        <h2 class="card__title">All Classes</h2>
+        <p class="text-muted">Search and filters affect this class list only. Open Sessions for dated attendance status and saved results.</p>
+        <div class="dean-class-filters">
+            <div><label for="class-search">Find a class</label><input id="class-search" type="search" class="form-control" placeholder="Course, class code, section or teacher"></div>
+            <div class="mobile-control-group"><label for="teacher-filter">Teacher</label><select id="teacher-filter" class="form-control">
+                <option value="all">All Teachers</option>
+                {% for t in teachers %}<option value="{{ t.username }}">{{ t.username }}</option>{% endfor %}
+            </select></div>
+        </div>
+    </div>
+    <div class="card__body">
+        {% if classes %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Teacher</th>
+                        <th>Course</th>
+                        <th>Class Code</th>
+                        <th>Section</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cls in classes %}
+                    <tr class="class-row" data-teacher="{{ cls.teacher_name }}" data-search="{{ cls.course_name }} {{ cls.class_code }} {{ cls.section or '' }} {{ cls.teacher_name }}">
+                        <td>{{ cls.teacher_name }}</td>
+                        <td><strong>{{ cls.course_name }}</strong></td>
+                        <td>{{ cls.class_code }}</td>
+                        <td>{{ cls.section or '—' }}</td>
+                        <td>
+                            <a href="{{ url_for('classes.class_session_history', class_id=cls.id, view='today') }}" class="btn btn--primary btn--sm">Sessions</a>
+                            <a href="{{ url_for('classes.class_enrollments', class_id=cls.id) }}" class="btn btn--secondary btn--sm">Enrollments</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <nav id="class-pagination" class="session-pagination" aria-label="Class pages">
+            <button id="class-previous" type="button" class="btn btn--secondary btn--sm" disabled>Previous</button>
+            <span id="class-page-summary" role="status" aria-live="polite"></span>
+            <button id="class-next" type="button" class="btn btn--secondary btn--sm">Next</button>
+        </nav>
+        {% else %}
+        <p>No classes registered in the system.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/dean-classes.js') }}"></script>
+{% endblock %}

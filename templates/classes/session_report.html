@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Session Report - {{ class_info.course_name }} - CSD FARS{% endblock %}
+
+{% block content %}
+{% set close_reason_labels = {
+    'manual_stop': 'Ended manually',
+    'session_stopped': 'Ended manually',
+    'camera_frame_failed': 'Camera stopped returning frames',
+    'heartbeat_timeout': 'Session timed out',
+    'superseded_by_new_session': 'Replaced by a new session',
+    'auto_end': 'Ended automatically'
+    , 'teacher_end': 'Ended by teacher', 'scheduled_cutoff': 'Scheduled cutoff reached'
+} %}
+
+<div class="page-header report-header">
+    <div>
+        <h1 class="page-header__title">Session Report</h1>
+        <p class="page-header__subtitle">
+            {{ class_info.course_name }} ({{ class_info.class_code }}) &middot; {{ attendance_session.scheduled_date }}
+        </p>
+    </div>
+    <div class="page-header__actions report-actions" aria-label="Session report actions">
+        <button type="button" class="btn btn--secondary report-action-btn" onclick="window.print()">Print</button>
+        <a href="{{ url_for('classes.class_session_report_export', class_id=class_info.id, attendance_session_id=attendance_session.id) }}" class="btn btn--primary report-action-btn" data-session-export="session_report_{{ attendance_session.id }}.xlsx" aria-describedby="session-export-status">Export Excel</a>
+        {% if session.role == 'Dean' %}
+        <a href="{{ url_for('classes.class_session_report_export', class_id=class_info.id, attendance_session_id=attendance_session.id, type='audit') }}" class="btn btn--secondary report-action-btn" data-session-export="session_audit_log_{{ attendance_session.id }}.xlsx" aria-describedby="session-export-status">Export Full Audit Log (Excel)</a>
+        {% endif %}
+        <a href="{{ report_return_url or url_for('classes.class_session_history', class_id=class_info.id) }}" class="btn btn--secondary report-action-btn">{{ 'Back to filtered reports' if report_return_url else 'Back' }}</a>
+        <a href="{{ url_for('reports.reports_index', date_scope='all', class_id=class_info.id, session_id=attendance_session.id) }}" class="btn btn--secondary report-action-btn">View in general Reports</a>
+    </div>
+</div>
+<p id="session-export-status" class="text-muted report-actions" role="status" aria-live="polite" aria-atomic="true"></p>
+{% if class_info.is_archived %}
+<p class="flash flash--info">This class is archived. You can view and export its history; restore the class before correcting attendance.</p>
+{% endif %}
+
+<div class="card report-summary-card">
+    {% if lifecycle_state and lifecycle_state.early_resume %}<div class="card__body"><strong>Camera attendance was resumed before its scheduled end.</strong><p>Reason: {{ lifecycle_state.early_resume.reason }}. Earlier endings and explanations remain in the session activity history.</p></div>{% endif %}
+    {% if lifecycle_state and lifecycle_state.reopening %}<div class="card__body"><strong>This session used an exceptional camera reopening.</strong><p>Reason: {{ lifecycle_state.reopening.reason }}. The original ending and reopening events remain in the audit history.</p></div>{% endif %}
+    {% if lifecycle_state and (lifecycle_state.resume_ended_available or lifecycle_state.reopen_available) and session.role == 'Teacher' and session.user_id == class_info.teacher_id %}<div class="card__body"><p>{{ lifecycle_state.resume_ended_message if lifecycle_state.resume_ended_available else lifecycle_state.reopen_message }}</p><a class="btn btn--secondary" href="{{ url_for('classes.class_session', class_id=class_info.id) }}">Open session controls</a></div>{% endif %}
+    {% if lifecycle_state %}<div class="card__body" role="status"><strong>{% if lifecycle_state.roster_consistent == false %}The original student list needs review. Saved attendance is preserved.{% elif lifecycle_state.clock_review_required %}Attendance is paused because the server time changed. Ask the server operator to check it.{% elif lifecycle_state.exhausted %}Automatic recovery could not finish. Check the saved attendance and recovery details.{% elif lifecycle_state.closure_confirmed %}Attendance ended.{% elif lifecycle_state.collection == 'starting' %}Preparing the camera. Attendance recording has not started yet.{% elif lifecycle_state.collection == 'interrupted' %}Attendance was interrupted. Saved results are preserved.{% elif not lifecycle_state.collection_allowed %}Attendance has stopped. Session ending is not yet confirmed.{% else %}Attendance is open until its scheduled end time.{% endif %}</strong>
+    {% if counts.Pending %}<p>These students still need attendance review. Choose each student’s status and enter a reason below. Corrections do not restart attendance.</p>{% endif %}
+    <p>{% if lifecycle_state.cleanup == 'pending' %}The camera stop is not confirmed. The camera remains reserved for this session.{% elif lifecycle_state.cleanup == 'confirmed' %}Camera stop confirmed.{% elif lifecycle_state.cleanup == 'not_applicable' %}No camera was used.{% else %}Camera availability has not been confirmed.{% endif %} {{ 'Session ending confirmed.' if lifecycle_state.closure_confirmed else 'Session ending is not confirmed.' }}</p></div>{% endif %}
+    {% if lifecycle_state %}<details class="card__body workflow-details"><summary>Timing and ending details</summary><p>{{ lifecycle_state.message }}</p><p>Attendance end time: {{ lifecycle_state.cutoff_label }}. Ending confirmed: {{ lifecycle_state.closed_label }}. Reason: {{ lifecycle_state.reason_label }}.</p></details>{% endif %}
+    {% if attendance_session.status == 'Open' and not lifecycle_state %}<p>Attendance is still open. Pending students have no attendance recorded yet.</p>{% endif %}
+    {% if lifecycle_state and lifecycle_state.roster_consistent %}
+    <p class="card__body">Attendance recorded for <strong>{{ counts.Total - counts.get('Pending', 0) }} of {{ counts.Total }} students</strong>. Recorded results include Present, Late, Absent and Excused.</p>
+    {% endif %}
+    <div class="card__body report-metric-grid">
+        {% if counts.Pending %}<div class="metric-card report-metric"><span class="metric-value">{{ counts.Pending }}</span><p class="metric-label">Pending</p></div>{% endif %}
+        <div class="metric-card report-metric report-metric--total">
+            <span class="metric-value">{{ counts.Total }}</span>
+            <p class="metric-label">Students included</p>
+        </div>
+        <div class="metric-card report-metric report-metric--present">
+            <span class="metric-value metric-value--success">{{ counts.Present }}</span>
+            <p class="metric-label">Present</p>
+        </div>
+        <div class="metric-card report-metric report-metric--late">
+            <span class="metric-value metric-value--warning">{{ counts.Late }}</span>
+            <p class="metric-label">Late</p>
+        </div>
+        <div class="metric-card report-metric report-metric--absent">
+            <span class="metric-value metric-value--danger">{{ counts.Absent }}</span>
+            <p class="metric-label">Absent</p>
+        </div>
+        <div class="metric-card report-metric report-metric--excused">
+            <span class="metric-value">{{ counts.Excused }}</span>
+            <p class="metric-label">Excused</p>
+        </div>
+    </div>
+</div>
+
+<div class="card report-details-card">
+    <div class="card__header">
+        <h2 class="card__title">Session Details</h2>
+    </div>
+    <div class="card__body report-detail-grid">
+        <div class="report-detail-item">
+            <span>Scheduled start</span>
+            <strong>{{ attendance_session.scheduled_start_time }}</strong>
+        </div>
+        <div class="report-detail-item">
+            <span>Started</span>
+            <strong>{{ attendance_session.actual_started_at or 'Not recorded' }}</strong>
+        </div>
+        <div class="report-detail-item">
+            <span>Ended</span>
+            <strong>{{ attendance_session.actual_ended_at or ('Open' if attendance_session.status == 'Open' else 'Not recorded') }}</strong>
+        </div>
+        <div class="report-detail-item">
+            <span>{{ 'Elapsed time (includes pause)' if lifecycle_state and (lifecycle_state.reopening or lifecycle_state.early_resume) else 'Duration' }}</span>
+            <strong>{{ attendance_session.actual_started_at | format_duration(attendance_session.actual_ended_at) if attendance_session.status == 'Open' or attendance_session.actual_ended_at else 'Not recorded' }}</strong>
+        </div>
+        <div class="report-detail-item">
+            <span>How attendance ended</span>
+            <strong>{{ close_reason_labels.get(attendance_session.close_reason, attendance_session.close_reason or ('In progress' if attendance_session.status == 'Open' else 'Not recorded')) }}</strong>
+        </div>
+    </div>
+</div>
+
+<div class="card report-table-card">
+    <div class="card__header">
+        <h2 class="card__title">Student Attendance</h2>
+        <p class="card__subtitle">Saved attendance for the students included in this session. Pending means no result is recorded; missing attendance is never treated as an absence.</p>
+    </div>
+    <div class="card__body">
+        <div class="table-container">
+            <table class="data-table report-attendance-table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Status</th>
+                        <th>Recorded At</th>
+                        <th>Recording Method</th>
+                        <th>Reason</th>
+                        {% if session.get('role') == 'Teacher' and not class_info.is_archived and attendance_session.status in ('Open', 'Closed') %}
+                        <th class="report-correction-column">Correction</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr>
+                        <td>
+                            <strong>{% if record.can_view_profile %}<a href="{{ url_for('students.student_profile', student_id=record.internal_student_id) }}" style="color: var(--color-primary); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">{{ record.name }}</a>{% else %}{{ record.name }}{% endif %}</strong><br>
+                            <span class="text-muted">{{ record.student_id }}</span>
+                            {% if not record.can_view_profile %}<br><small class="text-muted">Historical roster entry</small>{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {% if record.status == 'Present' %}badge--success{% elif record.status == 'Late' %}badge--warning{% elif record.status == 'Absent' %}badge--danger{% else %}badge--secondary{% endif %}">
+                                {{ record.status }}
+                            </span>
+                        </td>
+                        <td>{{ record.timestamp or 'Not recorded' }}{% if record.source == 'manual_edit' and record.updated_at and not record.initial_manual %}<br><span class="text-muted">{{ 'Updated' if record.manual_kind == 'legacy_manual' else 'Corrected' }} {{ record.updated_at }}</span>{% endif %}</td>
+                        <td>{{ 'Manual attendance' if record.initial_manual else 'Manual entry (type not recorded)' if record.source == 'manual_edit' and record.manual_kind == 'legacy_manual' else {'face_recognition': 'Camera recognition', 'manual_edit': 'Manual correction', 'system': 'System'}.get(record.source, record.source or 'Not recorded') }}</td>
+                        <td>{{ record.reason or ('Not required for initial attendance' if record.initial_manual else 'Not provided') }}</td>
+                        {% if session.get('role') == 'Teacher' and not class_info.is_archived and attendance_session.status in ('Open', 'Closed') %}
+                        <td class="report-correction-column">
+                            <details>
+                            <summary>Correct attendance</summary>
+                            <form class="attendance-edit-form"
+                                  data-url="{{ url_for('api_update_session_attendance', class_id=class_info.id, attendance_session_id=attendance_session.id, student_public_id=record.student_id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <label for="correction-status-{{ loop.index }}">Attendance status</label>
+                                <select id="correction-status-{{ loop.index }}" name="status" required aria-label="Attendance status for {{ record.name }} ({{ record.student_id }})">
+                                    {% if record.status == 'Pending' %}<option value="" selected disabled>Choose status</option>{% endif %}
+                                    {% for status in ['Present', 'Late', 'Absent', 'Excused'] %}
+                                    <option value="{{ status }}" {% if record.status == status %}selected{% endif %}>{{ status }}</option>
+                                    {% endfor %}
+                                </select>
+                                <label for="correction-reason-{{ loop.index }}">Reason (required)</label>
+                                <input id="correction-reason-{{ loop.index }}" type="text" name="reason" required placeholder="Explain the change" aria-label="Reason for attendance change for {{ record.name }} ({{ record.student_id }})">
+                                <button type="submit" class="btn btn--primary btn--sm" aria-label="Save attendance correction for {{ record.name }} ({{ record.student_id }})">Save</button>
+                                <p class="attendance-edit-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+                            </form>
+                            </details>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}<tr><td colspan="6">No student attendance records for this session. Missed or cancelled sessions do not imply student absences.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">Attendance change history</h2>
+    </div>
+    <div class="card__body">
+        {% if audits %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Changed At</th>
+                        <th>Student</th>
+                        <th>Changed By</th>
+                        <th>Previous</th>
+                        <th>New</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for audit in audits %}
+                    <tr>
+                        <td>{{ audit.changed_at }}</td>
+                        <td>{{ audit.student_name }}<br><span class="text-muted">{{ audit.public_student_id }}</span></td>
+                        <td>{{ audit.actor_name }}</td>
+                        <td>{{ audit.previous_status }}</td>
+                        <td>{{ audit.new_status }}</td>
+                        <td>{{ audit.change_reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No manual changes have been recorded for this session.</p>
+        {% endif %}
+    </div>
+</div>
+{% if lifecycle_events %}
+<details class="card">
+    <summary class="card__header">Session activity history</summary>
+    <div class="card__body table-container">
+        <p class="text-muted">Times use the school's local time. Attendance corrections are listed in Attendance change history above.</p>
+        <table class="data-table">
+            <thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Detail</th></tr></thead>
+            <tbody>{% for item in lifecycle_events %}
+                <tr><td>{{ item.time_label }}</td><td>{{ item.event_label }}</td><td>{{ item.actor_name }}</td><td>{{ item.detail }}</td></tr>
+            {% endfor %}</tbody>
+        </table>
+    </div>
+</details>
+{% endif %}
+{% if session.role == 'Teacher' and session.user_id == class_info.teacher_id and not class_info.is_archived %}
+<section class="card report-actions" data-results-controls data-class-id="{{ class_info.id }}" data-session-id="{{ attendance_session.id }}">
+  <div class="card__body"><strong>Student results display</strong>
+  <p>Results for this session remain available until you clear or replace its private display link. Video is shown only during live attendance. Clearing the display does not delete attendance.</p>
+  <button type="button" class="btn btn--secondary" data-display-action="enable">{{ 'Replace display link' if display_enabled else 'Enable results display' }}</button>
+  <button type="button" class="btn btn--secondary" data-display-action="deactivate" {% if not display_enabled %}hidden{% endif %}>Clear display</button>
+  <a data-results-link class="btn btn--primary" target="_blank" rel="noopener noreferrer" {% if display_url %}href="{{ display_url }}"{% else %}hidden{% endif %}>Open display</a>
+  <p data-results-message role="status"></p></div>
+</section>
+<script src="{{ url_for('static', filename='js/results-display-controls.js') }}" defer></script>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/session-report-export.js') }}"></script>
+{% if session.get('role') == 'Teacher' and not class_info.is_archived %}
+<script>
+document.querySelectorAll('.attendance-edit-form').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        const feedback = form.querySelector('.attendance-edit-feedback');
+        if (button.disabled) return;
+        if (!form.elements.reason.value.trim()) {
+            feedback.textContent = 'Enter a reason for this change.';
+            form.elements.reason.focus();
+            return;
+        }
+        button.disabled = true;
+        button.textContent = 'Saving…';
+        feedback.textContent = 'Saving your correction…';
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const response = await fetch(form.dataset.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    status: form.elements.status.value,
+                    reason: form.elements.reason.value
+                })
+            });
+            const data = await AuthResponse.readJson(response);
+            if (AuthResponse.redirectIfUnauthorized(response, data)) return;
+            if (!response.ok) {
+                feedback.textContent = data.error || 'Could not save the correction. Your entries are still here; please try again.';
+                return;
+            }
+            window.location.reload();
+        } catch (error) {
+            console.error(error);
+            feedback.textContent = 'Could not confirm the correction. Check your connection and reload the report to see whether it was saved.';
+        } finally {
+            button.disabled = false;
+            button.textContent = 'Save';
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

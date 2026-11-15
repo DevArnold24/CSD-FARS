@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Student Approvals - CSD FARS{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h2>Student Registration Approvals</h2>
+    <p class="text-muted">Review Teacher-submitted student registration requests before they become active system records.</p>
+    <p class="text-muted">Approval makes a student available in the directory. Their Teacher adds them to a class roster.</p>
+    <p class="text-muted">Submission times use the school's local time.</p>
+    <a class="btn btn--secondary" href="{{ url_for('students.student_approval_history') }}">Review History</a>
+    <a class="btn btn--secondary" href="{{ url_for('students.student_approvals') }}">Refresh Pending Requests</a>
+</div>
+
+<div id="approval-alert" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden style="margin-top: var(--space-md); padding: var(--space-md); border-radius: var(--radius-md); border: 1px solid transparent;"></div>
+
+<div class="card approval-card" style="margin-top: var(--space-lg);">
+    <div class="card__header">
+        <h3 class="card__title">Pending Requests</h3>
+        <p id="pending-approval-count" class="card__subtitle" role="status" aria-live="polite" aria-atomic="true">{{ pending_requests|length }} request{% if pending_requests|length != 1 %}s{% endif %} awaiting review</p>
+    </div>
+    <div class="card__body">
+        <div id="approval-table-container" class="approval-table-container" {% if not pending_requests %}hidden{% endif %}>
+            <table class="table approval-table" role="table" aria-label="Pending student registration requests">
+                <thead role="rowgroup">
+                    <tr role="row" style="text-align: left; border-bottom: 1px solid var(--color-border);">
+                        <th id="approval-col-student" role="columnheader" scope="col" style="padding: var(--space-sm);">Student</th>
+                        <th id="approval-col-program" role="columnheader" scope="col" style="padding: var(--space-sm);">Program</th>
+                        <th id="approval-col-year" role="columnheader" scope="col" style="padding: var(--space-sm);">Year</th>
+                        <th id="approval-col-submitter" role="columnheader" scope="col" style="padding: var(--space-sm);">Submitted By</th>
+                        <th id="approval-col-submitted" role="columnheader" scope="col" style="padding: var(--space-sm);">Submitted</th>
+                        <th id="approval-col-actions" role="columnheader" scope="col" style="padding: var(--space-sm); text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="approval-request-body" role="rowgroup">
+                    {% for item in pending_requests %}
+                    <tr role="row" data-request-id="{{ item.id }}" style="border-bottom: 1px solid var(--color-border);">
+                        <td role="cell" headers="approval-col-student" data-label="Student" style="padding: var(--space-md) var(--space-sm);">
+                            <div class="approval-cell-value">
+                                <div style="font-weight: var(--font-weight-medium);">{{ item.name }}</div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">{{ item.student_id }}</div>
+                            </div>
+                        </td>
+                        <td role="cell" headers="approval-col-program" data-label="Program" style="padding: var(--space-md) var(--space-sm);"><div class="approval-cell-value">{{ item.program_name }}</div></td>
+                        <td role="cell" headers="approval-col-year" data-label="Year" style="padding: var(--space-md) var(--space-sm);"><div class="approval-cell-value">{{ item.year_level }}</div></td>
+                        <td role="cell" headers="approval-col-submitter" data-label="Submitted By" style="padding: var(--space-md) var(--space-sm);"><div class="approval-cell-value">{{ item.submitted_by_username }}</div></td>
+                        <td role="cell" headers="approval-col-submitted" data-label="Submitted" style="padding: var(--space-md) var(--space-sm); color: var(--color-text-muted);"><div class="approval-cell-value">{{ item.submitted_at|school_local_time }}</div></td>
+                        <td role="cell" headers="approval-col-actions" data-label="Actions" style="padding: var(--space-md) var(--space-sm);">
+                            <div class="approval-cell-value approval-actions">
+                                <button type="button" class="btn btn--primary btn--sm approval-action" data-action="approve" data-url="{{ url_for('api_approve_student_registration', request_id=item.id) }}" data-student-name="{{ item.name }}" aria-label="Approve registration request for {{ item.name }}">
+                                    Approve
+                                </button>
+                                <button type="button" class="btn btn--secondary btn--sm approval-action" data-action="reject" data-url="{{ url_for('api_reject_student_registration', request_id=item.id) }}" data-student-name="{{ item.name }}" aria-label="Reject registration request for {{ item.name }}">
+                                    Reject
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p id="approval-empty-state" class="text-muted" style="margin: 0;" {% if pending_requests %}hidden{% endif %}>No pending student registration requests.</p>
+    </div>
+</div>
+
+<div id="approval-review-modal" role="dialog" aria-modal="true" aria-labelledby="approval-review-title" aria-describedby="approval-review-description" aria-hidden="true" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 1000; padding: var(--space-md);">
+    <div tabindex="-1" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); width: 100%; max-width: 480px; box-shadow: var(--shadow-lg);">
+        <h3 id="approval-review-title" style="margin-bottom: var(--space-xs);">Reject Registration Request</h3>
+        <p id="approval-review-description" class="text-muted" style="font-size: var(--font-size-sm); margin-bottom: var(--space-md);">Add an optional reason for rejecting <strong id="approval-review-student"></strong>. The submitting Teacher can use it to correct the request.</p>
+        <form id="approval-review-form">
+            <p id="approval-review-error" role="alert" aria-live="assertive" tabindex="-1" hidden style="margin-bottom: var(--space-md); color: var(--color-error);"></p>
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="approval-review-note" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm);">Rejection Reason (Optional)</label>
+                <textarea id="approval-review-note" rows="4" maxlength="1000" aria-describedby="approval-note-hint" autocomplete="off" style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);"></textarea>
+                <p id="approval-note-hint" class="form-hint">Up to 1,000 characters. The submitting Teacher will see this note.</p>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+                <button type="button" id="approval-review-cancel" class="btn btn--secondary">Cancel</button>
+                <button type="submit" id="approval-review-confirm" class="btn btn--primary">Reject Request</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/approvals.js') }}"></script>
+{% endblock %}

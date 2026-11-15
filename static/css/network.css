@@ -1,0 +1,20 @@
+.network-toolbar, .network-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.network-toolbar label { display: inline-flex; gap: .6rem; align-items: center; }
+.network-card { padding: 1.5rem; margin-top: 1.5rem; }
+.network-card h2 { font-size: 1.2rem; margin-bottom: .75rem; }
+.network-card p, #network-status { margin: .75rem 0; color: var(--color-text-secondary); }
+.network-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 1rem; margin: 1rem 0; }
+.network-summary dt { color: var(--color-text-secondary); margin-bottom: .4rem; }
+.network-summary dd { font-weight: 600; overflow-wrap: anywhere; }
+.network-device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; margin: 1rem 0; }
+.network-device { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.network-device h3 { font-size: 1rem; margin-bottom: .6rem; }
+.network-device dl { display: grid; grid-template-columns: minmax(90px, .7fr) minmax(0, 1fr); gap: .45rem .75rem; }
+.network-device dt { color: var(--color-text-secondary); }
+.network-device dd { margin: 0; }
+.network-card details { margin-top: 1rem; }
+.network-card summary { cursor: pointer; font-weight: 600; padding: .4rem 0; }
+.network-card ol { padding-left: 1.5rem; }
+.network-card li { margin: .6rem 0; }
+.network-card .network-warning { color: var(--color-warning); }
+@media (max-width: 600px) { .network-card { padding: 1rem; } .network-actions .btn { width: 100%; white-space: normal; } }

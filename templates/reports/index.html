@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Reports - CSD FARS{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/reports.css') }}">{% endblock %}
+{% from 'classes/_schedule_time.html' import schedule_time %}
+{% block content %}
+{% macro filter_select(name, empty_label='') %}<select name="{{ name }}">{% if empty_label %}<option value="">{{ empty_label }}</option>{% endif %}{% for value, label in options[name] %}<option value="{{ value }}" {% if filters[name] == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endmacro %}
+<div class="reports-page">
+<header class="page-header"><h1 class="page-header__title">Attendance reports</h1><p>{% if session.role == 'Teacher' %}Attendance for your assigned classes.{% else %}Department-wide attendance summary.{% endif %}</p></header>
+<section class="card report-filters">
+<form id="report-filters" action="/reports" method="get">
+<div class="report-filter-grid">
+<label>Dates{{ filter_select('date_scope') }}</label>
+<label>Start Date<input type="date" name="start_date" value="{{ start_date }}"></label>
+<label>End Date<input type="date" name="end_date" value="{{ end_date }}"></label>
+<label>Class{{ filter_select('class_id', 'All Classes') }}</label>
+<label>Student<input type="search" name="q" value="{{ filters.q }}" placeholder="Search name or student ID" maxlength="120"></label>
+<label>Status{{ filter_select('status', 'All statuses') }}</label>
+</div>
+<details class="report-advanced" {% if filters.archive or filters.section or filters.teacher_id or filters.program_id or filters.year_level or filters.session_id or filters.review %}open{% endif %}>
+<summary>More filters · class status, groups and session review</summary>
+<div class="report-filter-grid">
+<label>Class status{{ filter_select('archive', 'Current and archived') }}</label>
+<label>Section (current){{ filter_select('section', 'All sections') }}</label>
+{% if session.role == 'Dean' %}<label>Teacher (current){{ filter_select('teacher_id', 'All teachers') }}</label>{% endif %}
+<label>Program (current){{ filter_select('program_id', 'All programs') }}</label>
+<label>Year level (current){{ filter_select('year_level', 'All year levels') }}</label>
+<label>Session ID<input name="session_id" inputmode="numeric" pattern="[0-9]*" value="{{ filters.session_id }}" placeholder="Any saved session"></label>
+<label>Needs attention{{ filter_select('review', 'All entries') }}</label>
+</div></details>
+{% if filters.student_id %}<input type="hidden" name="student_id" value="{{ filters.student_id }}"><p>Student ID filter: <strong>{{ filters.student_id }}</strong>. Use Reset to remove it.</p>{% endif %}
+<div class="report-actions"><div class="report-shortcuts">{% for label, link in shortcuts %}<a class="btn btn--sm btn--outline" href="{{ link }}">{{ label }}</a>{% endfor %}</div><button class="btn btn--primary" type="submit">Apply Filters</button><a href="/reports" class="btn btn--outline">Reset</a></div>
+<p class="report-help">Editing a date selects Date range. Choose Today or All dates to use those periods. Student, status, program/year and review filters affect the records and Excel download. They do not change the attendance summary for the selected sessions.</p>
+<noscript><p>Choose Date range before editing dates, then apply the filters.</p></noscript>
+{% if clear_filters %}<p>Active filters: {% for label, value, link in clear_filters %}<a href="{{ link }}" aria-label="Clear {{ label }} filter">{{ label }}: {{ value }} ×</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+<p id="filter-notice" role="status" hidden>Apply filters to update the report and download.</p>
+</form></section>
+{% if validation_error %}<div role="alert" class="card"><strong>{{ validation_error }}</strong><p>Check the dates or filters, then try again.</p></div>{% else %}
+<section class="card"><div class="report-heading"><div><h2>{{ 'All recorded dates' if not start_date else 'Session dates: ' ~ start_date ~ ' to ' ~ end_date }}</h2><p class="report-help">Saved results loaded {{ loaded_at }} (school time, {{ school_timezone }}). Refresh to include attendance or corrections saved since then.</p></div><a class="btn btn--outline" href="{{ current_report_url }}">Refresh results</a></div><p class="report-help">Results belong to the session's scheduled date, even when attendance is recorded or corrected on another day.</p></section>
+<section class="card"><h2>Whole-session attendance summary</h2><p>For the selected dates, class, current teacher/section, class status and session. Student, attendance status, current program/year and review filters do not change these figures.</p>
+<div class="report-summary-grid">
+    <div class="report-summary-metric">
+        <h3>Attendance recorded</h3>
+        {% if context.completeness is not none %}
+        <p class="report-summary-value">{{ context.explicit }} of {{ context.expected }}</p>
+        <p>{{ context.completeness }}% of expected attendance entries have a result.</p>
+        {% elif context.unknown or context.legacy_entries %}<p>The complete attendance count cannot be confirmed from the saved history.</p>
+        {% else %}<p>No expected attendance entries in this selection.</p>{% endif %}
+        <p class="report-help">Includes Present, Late, Absent and Excused. Recorded does not mean Present.</p>
+    </div>
+    <div class="report-summary-metric">
+        <h3>Final attendance rate</h3>
+        <p class="report-summary-value">{{ context.rate ~ '%' if context.rate is not none else 'N/A' }}</p>
+        {% if context.rate is none %}<p>{{ context.rate_label }}.</p>{% endif %}
+        <p class="report-help">Excused is separate from this rate.</p>
+        <details class="report-rate-explanation"><summary>How the rate is calculated</summary><p class="report-help">(Present + Late) ÷ (Present + Late + Absent). Pending is never counted as Absent. A final rate requires complete, verified attendance and at least one Present, Late or Absent result.</p></details>
+    </div>
+</div>
+<p>{{ context.counts.Pending }} Pending · {{ context.counts.Excused }} Excused · {{ context.held }} held {{ 'session' if context.held == 1 else 'sessions' }} · {{ context.missed }} saved missed sessions · {{ context.cancelled }} cancelled. Missed sessions are not student absences.</p>
+{% if context.unknown or context.legacy_entries %}<p class="report-provisional">The original student list cannot be confirmed for {{ context.unknown }} sessions and {{ context.legacy_entries }} older records without a session link. Saved results are preserved; a final percentage is not available.</p>{% endif %}
+{% if context.unclosed %}<p class="report-provisional">{{ context.unclosed }} {{ 'session is' if context.unclosed == 1 else 'sessions are' }} not confirmed as ended. Having a recorded result for every student does not mean attendance has ended.</p>{% endif %}
+{% if context.cleanup_pending %}<p class="report-provisional">For {{ context.cleanup_pending }} {{ 'session' if context.cleanup_pending == 1 else 'sessions' }}, the camera stop is not confirmed. This is separate from whether attendance was saved.</p>{% endif %}</section>
+<section class="card"><div class="report-heading"><div><h2>Filtered results · {{ summary.Total }} attendance {{ 'entry' if summary.Total == 1 else 'entries' }}</h2><p>{{ stats.students }} unique {{ 'student' if stats.students == 1 else 'students' }} · {{ stats.sessions }} saved {{ 'session' if stats.sessions == 1 else 'sessions' }}</p></div><p>{{ start_date ~ ' to ' ~ end_date if start_date else 'All recorded dates' }}</p></div>
+<div class="report-totals">{% for status in statuses %}<div class="report-total status-{{ status|lower }}"><strong>{{ stats.pending if status == 'Pending' else summary[status] }}</strong><span>{{ status }}</span></div>{% endfor %}</div>
+<p class="report-help">Filtered records: these totals reflect the filters above, not an overall class attendance rate. Each entry is one student’s result for one session. Students may appear in several sessions. Missed dates without a saved session remain in class history.</p>
+{% if stats.open_entries %}<p class="report-provisional">Includes open sessions. Pending means attendance has not been recorded yet; these totals are provisional.</p>{% endif %}
+{% if reviews %}<div class="report-provisional"><strong>Sessions needing review · {{ review_count }}</strong><p>These counts cover all students originally included in each session, regardless of student, status, current program/year, review or page filters. Pending means a result still needs to be recorded; it does not mean Absent.</p>
+{% for item in reviews %}<p><a href="{{ url_for('classes.class_session_report', class_id=item.class_id, attendance_session_id=item.session_id, return_report=current_report_url) }}">Session {{ item.session_id }} · {{ item.session_date }}</a>: {{ item.pending }} Pending · {{ item.session_state }}{% if item.cleanup == 'pending' %} · Camera stop not confirmed{% endif %}{% if item.data_issue %} · {{ item.data_issue }}{% endif %}</p>{% endfor %}{% if review_previous %}<a href="{{ review_previous }}">Previous sessions needing review</a>{% endif %} {% if review_next %}<a href="{{ review_next }}">More sessions needing review</a>{% endif %}</div>{% endif %}
+</section>
+<section class="card"><div class="report-heading"><div><h2>Attendance records</h2><p>Showing {{ first }} to {{ last }} of {{ summary.Total }} matching entries</p></div>
+<form id="export-form" action="/api/reports/export" method="get">{% for key, value in export_filters.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<button type="submit" class="btn btn--primary" {% if not rows %}disabled{% endif %}>Download Excel</button></form></div>
+<p id="export-status" role="status" aria-live="polite"></p>
+<p class="report-help">Excel includes all matching records for the displayed dates, the selected filters and the time it was created. Recent corrections may change the download. If a large download takes too long, try a shorter date range. A partial file will not be presented as a complete export.</p>
+{% if rows %}<div class="report-table-scroll" tabindex="0" role="region" aria-label="Attendance records"><table class="report-table"><thead><tr><th>Student</th><th>Class</th><th>Session</th><th>Status</th><th>Check-in time</th><th>Recorded by</th><th>Details</th></tr></thead><tbody>
+{% for row in rows %}<tr><td><strong>{{ row.student_name }}</strong><small>{{ row.student_public_id }}</small></td><td>{{ row.course_name }}<small>{{ row.class_code }}{% if row.section %} · {{ row.section }}{% endif %}</small></td><td>{{ row.session_date }} · {{ schedule_time(row.scheduled_start_time) }}<small>{{ row.session_state }}{% if row.session_id %} · #{{ row.session_id }}{% endif %}</small></td><td><span class="report-badge status-{{ row.status|lower }}">{{ row.status }}</span></td><td>{{ row.checkin_time or 'Not recorded' }}</td><td>{{ row.method }}{% if row.latest_editor %}<small>{{ row.latest_editor }}</small>{% endif %}</td><td>{% if row.session_id %}<a href="{{ url_for('classes.class_session_report', class_id=row.class_id, attendance_session_id=row.session_id, return_report=current_report_url) }}">View session</a>{% else %}Legacy record{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<nav class="report-actions" aria-label="Report pages">{% if page > 1 %}<a class="btn btn--outline" href="{{ previous_url }}">Previous</a>{% endif %}<span>Page {{ page }} of {{ pages }}</span>{% if page < pages %}<a class="btn btn--outline" href="{{ next_url }}">Next</a>{% endif %}<span class="report-help">Excel includes all {{ summary.Total }} matching entries.</span></nav>
+{% else %}<div class="report-empty"><p>No attendance records match these dates and filters.</p>{% if start_date %}<p><a href="{{ all_dates_url }}">Show all dates with these filters</a></p>{% endif %}<p>Clear individual filters above to widen the selection. Reset returns to Today.</p></div>{% endif %}
+</section>
+<details class="report-notes"><summary>How to read this report</summary><p>{{ details_note }}</p><p>Check-in time is shown when supported by the original attendance record or its correction history. Changing a status does not create a check-in time. Excel also includes record creation and correction times, in school-local time.</p></details>
+{% endif %}</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/report-export.js') }}"></script><script src="{{ url_for('static', filename='js/reports.js') }}"></script>{% endblock %}

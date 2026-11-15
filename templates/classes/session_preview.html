@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% from 'classes/_schedule_time.html' import schedule_time %}
+{% from 'classes/_session_state.html' import status, action with context %}
+{% block title %}Session details - {{ item.course_name }} - CSD FARS{% endblock %}
+{% block content %}
+<div class="page-header"><div><h1 class="page-header__title">{{ item.course_name }}</h1><p class="page-header__subtitle">{{ item.class_code }} · {{ item.scheduled_date }}{% if item.id %} · Session #{{ item.id }}{% endif %}</p></div>
+<a class="btn btn--secondary" href="{{ url_for('classes.class_session_history', class_id=item.class_id, view='today') }}">All class sessions</a></div>
+<section class="card" style="padding:var(--space-lg);max-width:52rem;">
+<h2 class="card__title">Session details</h2><p>{{ status(item) }}</p>
+<dl class="session-preview-times">
+{% if item.preview and item.status == 'Scheduled' %}<div><dt>Attendance opens</dt><dd>{{ item.opening.strftime('%d %b %Y, %I:%M %p') if item.opening else 'Unavailable' }}</dd></div>{% endif %}
+<div><dt>Class starts</dt><dd>{{ item.scheduled_date }} · {{ schedule_time(item.scheduled_start_time) }}</dd></div>
+{% if item.late_at %}<div><dt>Late after</dt><dd>{{ item.late_at.strftime('%d %b %Y, %I:%M %p') }}</dd></div>{% endif %}
+<div><dt>Attendance ends</dt><dd>{% if item.ends %}{{ item.ends.strftime('%d %b %Y, %I:%M %p') }}{% else %}{{ schedule_time(item.scheduled_end_time) }}{% endif %}</dd></div>
+</dl>
+<p class="text-muted">Times use the school's local time.</p>
+{% if item.timing_error %}<p role="alert">{{ item.timing_error }} Update the class late-marking setting before starting attendance.</p>{% endif %}
+{% if item.id %}
+<p>{{ item.lifecycle_message or 'This is a saved session. Viewing it does not start attendance.' }}</p>{{ action(item) }}
+{% elif item.status == 'Unrecorded' %}
+<p>No attendance was recorded for this meeting. This does not mean the class was not held or students were absent.</p>
+<a class="btn btn--secondary" href="{{ url_for('classes.class_session_history', class_id=item.class_id, view='past', start_date=item.scheduled_date, end_date=item.scheduled_date) }}">View history and explanations</a>
+{% else %}
+{% if item.opening_error %}<p role="alert">{{ item.opening_error }}</p>{% endif %}
+{% if earlier and earlier.status == 'Open' %}<p>Attendance from {{ earlier.scheduled_date }} still needs attention. Finish checking that session before starting another.</p>
+{% if session.role == 'Teacher' %}<a class="btn btn--secondary" href="{{ url_for('classes.class_session', class_id=item.class_id, session_id=earlier.id, session_date=earlier.scheduled_date) }}">View unfinished session · {{ earlier.scheduled_date }}</a>{% endif %}
+{% elif can_open %}<p>{{ 'Early attendance is available within the Dean’s setting. ' if item.early else '' }}Review the students and attendance method before confirming. The late threshold and end time stay unchanged.</p>
+<a class="btn btn--primary" href="{{ url_for('classes.class_session', class_id=item.class_id, session_date=item.scheduled_date) }}">Review and start{{ ' early' if item.early else '' }}</a>
+{% else %}<p>This is a read-only schedule preview. Attendance cannot start before its permitted opening time. The assigned teacher confirms Start after the readiness checks.</p><a class="btn btn--secondary" href="{{ url_for('classes.session_preview', class_id=item.class_id, date=item.scheduled_date) }}">Refresh availability</a>{% endif %}
+{% endif %}
+</section>
+{% endblock %}

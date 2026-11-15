@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}My Registration Requests - CSD FARS{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/registration-requests.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header request-page-header">
+    <div>
+        <h1 class="page-header__title">My Registration Requests</h1>
+        <p class="text-muted">Track the student registrations you submitted. Pending requests need a Dean or Office Admin's approval before students can join rosters.</p>
+    </div>
+    <a class="btn btn--primary" href="{{ url_for('students.student_registration') }}">New Registration Request</a>
+</div>
+
+<p class="request-counts" aria-label="Your registration request totals">
+    {% for status in statuses %}<span>{{ status }}: <strong>{{ counts[status] }}</strong></span>{% endfor %}
+</p>
+
+<form class="request-filters card" method="get" action="{{ url_for('students.my_registration_requests') }}" aria-label="Filter your registration requests">
+    <div class="form-group">
+        <label class="form-label" for="request-status">Status</label>
+        <select class="form-input" id="request-status" name="status" {% if validation_error %}aria-invalid="true" aria-describedby="request-filter-error"{% endif %}>
+            <option value="">All statuses</option>
+            {% for status in statuses %}<option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-group request-search">
+        <label class="form-label" for="request-search">Student name or ID</label>
+        <input class="form-input" type="search" id="request-search" name="q" value="{{ query }}" maxlength="120" autocomplete="off">
+    </div>
+    <div class="request-actions">
+        <button class="btn btn--primary" type="submit">Apply Filters</button>
+        <a class="btn btn--secondary" href="{{ url_for('students.my_registration_requests') }}">Clear Filters</a>
+    </div>
+</form>
+{% if validation_error %}<p id="request-filter-error" class="flash flash--error" role="alert">{{ validation_error }}</p>{% endif %}
+
+<div class="request-results-heading">
+    <p id="request-result-count" role="status" aria-live="polite">{{ total }} matching request{% if total != 1 %}s{% endif %}{% if total %} · Page {{ page }} of {{ page_count }}{% endif %}</p>
+    <a class="btn btn--secondary btn--sm" href="{{ url_for('students.my_registration_requests', status=selected_status, q=query, page=page) }}">Refresh Status</a>
+</div>
+<p class="text-muted">Review outcomes appear here after you refresh. Times are shown in school-local time.</p>
+
+{% if registration_requests %}
+<ol class="request-list" aria-label="Your registration requests" aria-describedby="request-result-count">
+    {% for item in registration_requests %}
+    <li class="card request-card" id="request-{{ item.id }}">
+        <article aria-labelledby="request-title-{{ item.id }}">
+            <div class="request-card-heading">
+                <h2 id="request-title-{{ item.id }}">{{ item.name }}</h2>
+                <span class="badge {% if item.status == 'Approved' %}badge--success{% elif item.status == 'Rejected' %}badge--error{% else %}badge--warning{% endif %}">{{ item.status }}</span>
+            </div>
+            <dl class="request-details">
+                <div><dt>Student ID</dt><dd>{{ item.student_id }}</dd></div>
+                <div><dt>Academic program</dt><dd>{{ item.program_name or 'Program unavailable' }}</dd></div>
+                <div><dt>Year level</dt><dd>{{ item.year_level }}</dd></div>
+                <div><dt>Request</dt><dd>#{{ item.id }}</dd></div>
+                <div><dt>Submitted</dt><dd><time datetime="{{ item.submitted_at|replace(' ', 'T') }}Z">{{ item.submitted_at|school_local_time }}</time></dd></div>
+                {% if item.reviewed_at %}<div><dt>Reviewed</dt><dd><time datetime="{{ item.reviewed_at|replace(' ', 'T') }}Z">{{ item.reviewed_at|school_local_time }}</time></dd></div>{% endif %}
+            </dl>
+            {% if item.status != 'Pending' %}
+            <h3 class="request-note-heading">Reviewer feedback</h3>
+            <p class="request-review-note">{{ item.review_note or 'No review note was provided. Contact the Office Admin if you need clarification.' }}</p>
+            {% endif %}
+            {% if item.status == 'Pending' %}
+            <p>Awaiting review. To correct this submission, contact the Office Admin and ask them to reject it with a review note. Then you can submit the corrected details.</p>
+            {% elif item.status == 'Approved' %}
+            <p>Registration was approved. Use your class roster to find and enroll the student. If the student is no longer available, contact the Office Admin.</p>
+            <a class="btn btn--secondary" href="{{ url_for('classes.manage_classes') }}">Open My Classes</a>
+            {% elif item.already_registered or item.has_pending_request %}
+            <p>This Student ID is already registered or has another pending request. Review your request history or contact the Office Admin before submitting again.</p>
+            {% else %}
+            <p>Review the feedback, correct the details, verify consent, and capture three new poses. Resubmitting creates a new request and keeps this review in your history.</p>
+            <a class="btn btn--primary" href="{{ url_for('students.student_registration', resubmit=item.id) }}">Correct and Resubmit<span class="visually-hidden"> request #{{ item.id }} for {{ item.name }}</span></a>
+            {% endif %}
+        </article>
+    </li>
+    {% endfor %}
+</ol>
+{% else %}
+<div class="card request-empty">
+    {% if selected_status or query %}
+    <h2>No requests match these filters</h2>
+    <p>Try another name or ID, or clear the filters to see all your submissions.</p>
+    {% else %}
+    <h2>No registration requests yet</h2>
+    <p>Submit your first student registration request. Its status and reviewer feedback will appear here.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if page_count > 1 %}
+<nav class="request-pagination" aria-label="Registration request pages">
+    {% if page > 1 %}<a class="btn btn--secondary" rel="prev" href="{{ url_for('students.my_registration_requests', status=selected_status, q=query, page=page - 1) }}">Previous page</a>{% endif %}
+    <span>Page {{ page }} of {{ page_count }}</span>
+    {% if page < page_count %}<a class="btn btn--secondary" rel="next" href="{{ url_for('students.my_registration_requests', status=selected_status, q=query, page=page + 1) }}">Next page</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

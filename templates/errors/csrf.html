@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if expired %}Form expired{% else %}Form could not be verified{% endif %} - CSD FARS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <main class="error-page">
+        <div>
+            <h1 class="error-page__title">{% if expired %}Form expired{% else %}Form could not be verified{% endif %}</h1>
+            <p class="error-page__message">
+                {% if expired %}This page was open too long and its security token expired.{% else %}The form's security check failed.{% endif %}
+                Your request was not processed.
+            </p>
+            <p class="error-page__message">Reload the form, review your details and submit again. You may need to re-enter unsaved information.</p>
+            <a href="{{ recovery_url }}" class="btn btn--primary">{{ recovery_label }}</a>
+        </div>
+    </main>
+</body>
+</html>

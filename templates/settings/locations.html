@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Buildings and rooms - CSD FARS{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h2>Buildings and rooms</h2>
+    <p class="text-muted">Manage school buildings, floors and rooms. Camera information comes from saved checks; opening this page does not test a camera.</p>
+</div>
+
+<style>.location-actions { display:flex; flex-wrap:wrap; gap:var(--space-xs); align-items:center; } .location-item-feedback { flex-basis:100%; }</style>
+<div id="location-feedback" class="flash flash--success" role="status" tabindex="-1" hidden></div>
+
+<div class="grid responsive-grid settings-locations-grid" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,2fr);gap:var(--space-xl);margin-top:var(--space-lg);">
+    <section class="card" style="padding:var(--space-lg);">
+        <h3>Building</h3>
+        <p class="form-hint">Start here, then add a floor and room below.</p>
+        <form id="building-form">
+            <input type="hidden" id="building-id">
+            <div class="form-group">
+                <label class="form-label" for="building-name">Building name</label>
+                <input class="form-input" type="text" id="building-name" maxlength="120" required autocomplete="off" placeholder="e.g. Main Building">
+            </div>
+            <div id="building-feedback" class="flash" role="status" aria-live="polite" tabindex="-1" hidden></div>
+            <button class="btn btn--primary" type="submit">Save Building</button>
+            <button class="btn btn--secondary" type="button" id="building-clear">Clear</button>
+        </form>
+
+        <h3 style="margin-top:var(--space-xl);">Floor</h3>
+        <form id="floor-form">
+            <input type="hidden" id="floor-id">
+            <div class="form-group">
+                <label class="form-label" for="floor-building-id">Building</label>
+                <select class="form-input" id="floor-building-id" required>
+                    <option value="">Select building...</option>
+                    {% for building in buildings %}
+                    <option value="{{ building.id }}" {% if not building.is_active %}disabled{% endif %}>{{ building.name }}{% if not building.is_active %} (inactive){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="floor-name">Floor label</label>
+                <input class="form-input" type="text" id="floor-name" maxlength="120" required autocomplete="off" placeholder="e.g. 1st Floor">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="floor-sort-order">Display order</label>
+                <input class="form-input" type="number" id="floor-sort-order" min="-100000" max="100000" step="1" value="10">
+            </div>
+            <div id="floor-feedback" class="flash" role="status" aria-live="polite" tabindex="-1" hidden></div>
+            <button class="btn btn--primary" type="submit">Save Floor</button>
+            <button class="btn btn--secondary" type="button" id="floor-clear">Clear</button>
+        </form>
+
+        <h3 style="margin-top:var(--space-xl);">Room</h3>
+        <form id="room-form">
+            <input type="hidden" id="room-id">
+            <div class="form-group">
+                <label class="form-label" for="room-floor-id">Floor</label>
+                <select class="form-input" id="room-floor-id" required>
+                    <option value="">Select floor...</option>
+                    {% for floor in floors %}
+                    <option value="{{ floor.id }}" {% if not floor.is_active or not floor.building_is_active %}disabled{% endif %}>{{ floor.building_name }} / {{ floor.name }}{% if not floor.is_active or not floor.building_is_active %} (unavailable){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group"><label class="form-label" for="room-code">Stable room code</label><input class="form-input" type="text" id="room-code" maxlength="80" required autocomplete="off"></div>
+            <div class="form-group"><label class="form-label" for="room-name">Room name/number</label><input class="form-input" type="text" id="room-name" maxlength="120" autocomplete="off"></div>
+            <div class="form-group">
+                <label class="form-label" for="room-type">Room type</label>
+                <select class="form-input" id="room-type">{% for room_type in room_types %}<option value="{{ room_type }}">{{ room_type }}</option>{% endfor %}</select>
+            </div>
+            <div class="form-group"><label class="form-label" for="room-capacity">Capacity</label><input class="form-input" type="number" id="room-capacity" min="0" max="1000000" step="1"></div>
+            <div class="form-group"><label class="form-label" for="room-notes">Notes</label><textarea class="form-input" rows="3" id="room-notes" maxlength="2000"></textarea></div>
+            <div id="room-feedback" class="flash" role="status" aria-live="polite" tabindex="-1" hidden></div>
+            <button class="btn btn--primary" type="submit">Save Room</button>
+            <button class="btn btn--secondary" type="button" id="room-clear">Clear</button>
+        </form>
+    </section>
+
+    <section class="card" style="padding:var(--space-lg);">
+        <h3>Building → Floor → Room → Active CCTV</h3>
+        <div id="location-hierarchy"></div>
+    </section>
+</div>
+
+<script>
+window.CSD_LOCATIONS = {{ {'buildings': buildings, 'floors': floors, 'rooms': rooms}|tojson }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/locations.js') }}"></script>
+{% endblock %}

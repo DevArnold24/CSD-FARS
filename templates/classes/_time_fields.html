@@ -1,0 +1,37 @@
+<div class="class-times" data-class-times>
+    <div class="class-time-pair">
+        {% for name, title, value in [('start_time', 'Class starts', schedule_start), ('end_time', 'Class ends', schedule_end)] %}
+        <fieldset class="class-time-field" data-time-field="{{ name }}">
+            <legend>{{ title }}</legend>
+            <div data-time-fallback>
+                <label for="{{ name }}">{{ 'Start Time' if name == 'start_time' else 'End Time' }}</label>
+                <input type="time" step="1" id="{{ name }}" name="{{ name }}" value="{{ value }}" required>
+            </div>
+            <div class="class-time-choices" data-time-choices hidden>
+                {% for part, label in [('hour', 'Hour'), ('minute', 'Minute'), ('period', 'AM / PM'), ('second', 'Seconds')] %}
+                <div data-time-part="{{ part }}" {% if part == 'second' %}hidden{% endif %}>
+                    <label for="{{ name }}_{{ part }}">{{ label }}</label>
+                    <select id="{{ name }}_{{ part }}" data-part="{{ part }}" aria-describedby="{{ name }}_error" disabled>
+                        <option value="">Select</option>
+                        {% if part == 'period' %}
+                        <option value="AM">AM</option><option value="PM">PM</option>
+                        {% else %}
+                        {% for number in range(1, 13) if part == 'hour' %}
+                        <option value="{{ number }}">{{ number }}</option>
+                        {% endfor %}
+                        {% for number in range(60) if part != 'hour' %}
+                        <option value="{{ '%02d'|format(number) }}">{{ '%02d'|format(number) }}</option>
+                        {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="form-hint" data-seconds-help hidden>This saved time includes seconds. They are kept unless you change them.</p>
+            <p class="class-time-error" id="{{ name }}_error" aria-live="polite" hidden></p>
+        </fieldset>
+        {% endfor %}
+    </div>
+    <p class="form-hint">Use the school's local time. 12 AM is midnight; 12 PM is noon. Classes must end on the same day.</p>
+    <p class="class-time-summary" data-time-summary role="status" aria-live="polite" hidden></p>
+</div>

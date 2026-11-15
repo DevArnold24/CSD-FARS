@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from 'classes/_schedule_time.html' import schedule_time %}
+{% from 'classes/_session_state.html' import status, action with context %}
+
+{% block title %}Teacher Dashboard -- CSD FARS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Teacher Dashboard</h1>
+    <p class="page-header__subtitle">Welcome back, {{ session.username }}. Here are your classes.</p>
+</div>
+
+{% include 'classes/_session_links.html' %}
+
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">Today’s sessions and ongoing attendance</h2>
+        <p class="card__subtitle">Each row is one dated meeting. Earlier unfinished attendance stays visible until its closure is confirmed.</p>
+    </div>
+    <div class="card__body">
+        {% if classes %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Course</th>
+                        <th>Class Code</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cls in classes %}
+                    <tr>
+                        <td><strong>{{ cls.course_name }}</strong></td>
+                        <td>{{ cls.class_code }}</td>
+                        <td>{{ cls.scheduled_date }}<br>{{ schedule_time(cls.scheduled_start_time) }} – {{ schedule_time(cls.scheduled_end_time) }}</td>
+                        <td>{{ status(cls) }}{% if cls.pending_count %}<br><small>{{ cls.pending_count }} students Pending</small>{% endif %}{% if cls.opening and cls.label == 'Not open yet' %}<br><small>Opens {{ cls.opening.strftime('%d %b, %I:%M %p') }}</small>{% endif %}</td>
+                        <td>
+                            {{ action(cls) }}
+                            <a href="{{ url_for('classes.class_session_history', class_id=cls.class_id) }}" class="btn btn--secondary btn--sm">Class sessions</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if meeting_total > classes|length %}<p>Showing {{ classes|length }} of {{ meeting_total }} meetings. <a href="{{ url_for('classes.session_agenda') }}">View all today’s and ongoing sessions</a>.</p>{% endif %}
+        {% else %}
+        <p>No meetings today or unfinished attendance. <a href="{{ url_for('classes.session_agenda', view='upcoming') }}">View upcoming sessions</a>.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card" style="margin-top: 2rem;">
+    <div class="card__header">
+        <h2 class="card__title">Attendance for today’s meetings</h2>
+        <p class="card__subtitle">Totals cover meetings dated {{ summary_date }}. Meetings from other dates shown above are not included in these totals.</p>
+    </div>
+    <div class="card__body">
+        <div class="metric-grid">
+            <div class="metric-card"><span class="metric-value">{{ stats['Pending'] }}</span><p class="metric-label">Pending</p></div>
+            <div class="metric-card">
+                <span class="metric-value metric-value--success">{{ stats['Present'] }}</span>
+                <p class="metric-label">Present</p>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value metric-value--warning">{{ stats['Late'] }}</span>
+                <p class="metric-label">Late</p>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value">{{ stats['Excused'] }}</span>
+                <p class="metric-label">Excused</p>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value metric-value--danger">{{ stats['Absent'] }}</span>
+                <p class="metric-label">Absent</p>
+            </div>
+        </div>
+        {% from 'includes/attendance_summary.html' import attendance_summary %}
+        {{ attendance_summary(attendance, 'Today, your assigned classes') }}
+        <a href="{{ url_for('reports.reports_index') }}">Review reports</a>
+    </div>
+</div>
+{% endblock %}

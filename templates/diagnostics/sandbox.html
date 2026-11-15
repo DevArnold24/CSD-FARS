@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Recognition Tuner -- CSD FARS{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/sandbox.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Camera check & tuning</h1>
+    <p class="page-header__subtitle">Check this computer and camera before using attendance. This test does not record attendance.</p>
+</div>
+
+<ol class="tuner-steps" aria-label="Camera check steps">
+    <li><strong>1. Choose your camera</strong><span>Use the computer and camera you will use for attendance.</span></li>
+    <li><strong>2. Check the picture</strong><span>Start Tuner, then move a hand. Use Smooth live view to check the visible delay.</span></li>
+    <li><strong>3. Check recognition</strong><span>Choose Recognition boxes. Check the correct enrolled name and that an unenrolled volunteer stays unknown.</span></li>
+</ol>
+
+<!-- Dynamic Toast Container -->
+<div id="sandbox-toast-container" role="status" aria-live="polite" aria-atomic="true" style="position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px;"></div>
+
+<div class="sandbox-grid responsive-grid">
+    <!-- Left Column: Video Feed & Camera Controls -->
+    <div class="card">
+        <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 class="card__title">Camera preview</h2>
+            <div id="sandbox-status-badge" class="badge {% if is_sandbox_running %}badge--success{% else %}badge--warning{% endif %}">
+                {% if is_sandbox_running %}Session Active{% else %}Session Stopped{% endif %}
+            </div>
+        </div>
+        <div class="card__body" style="text-align: center;">
+            <div class="controls-row" style="display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+                <label for="camera-select">Camera device</label>
+                <select id="camera-select" class="form-control" data-running-camera-id="{{ sandbox_camera_id if sandbox_camera_id is defined and sandbox_camera_id is not none else '' }}" aria-describedby="tuner-camera-selection-status" {% if is_sandbox_running %}disabled{% endif %} style="max-width: 280px;">
+                    {% for cam in active_cameras %}
+                        <option value="{{ cam.id }}" data-normal-match-threshold='{{ cam.normal_match_threshold | default(none) | tojson }}' {% if is_sandbox_running and sandbox_camera_id is defined and cam.id == sandbox_camera_id %}selected{% endif %}>{{ cam.name }} ({{ cam.resolution_width }}x{{ cam.resolution_height }} requested)</option>
+                    {% else %}
+                        <option value="">Default Active Camera</option>
+                    {% endfor %}
+                </select>
+                <button id="btn-start-sandbox" class="btn btn--primary" {% if is_sandbox_running %}style="display:none;"{% endif %}>Start Tuner</button>
+                <button id="btn-stop-sandbox" class="btn btn--danger" {% if not is_sandbox_running %}style="display:none;"{% endif %}>Stop Tuner</button>
+            </div>
+            <p id="tuner-camera-selection-status" class="tuner-help" role="status">{% if is_sandbox_running %}Stop the running test before choosing another camera.{% endif %}</p>
+            <div style="text-align: left; margin-bottom: 12px;">
+                <label for="sandbox-feed-view">View</label>
+                <select id="sandbox-feed-view" class="form-control" aria-describedby="sandbox-feed-view-help" style="max-width: 280px; margin-top: 4px;">
+                    <option value="live" selected>Smooth live view</option>
+                    <option value="recognition">Recognition boxes</option>
+                </select>
+                <p id="sandbox-feed-view-help" style="font-size: 0.82rem; color: var(--color-text-muted); margin: 6px 0 0;">Smooth live view is best for watching movement. Recognition boxes show completed face checks and can refresh more slowly. Changing this view does not change recognition settings.</p>
+            </div>
+            <!-- Video Container with Overlay Placeholder -->
+            <div id="video-container" style="position: relative; background: #0f172a; min-height: 380px; display: flex; align-items: center; justify-content: center; border-radius: 8px; overflow: hidden; margin-bottom: 16px;">
+                <img id="sandbox-feed-img" src="{% if is_sandbox_running %}{{ url_for('diagnostics.api_sandbox_feed', view='live') }}{% else %}data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs={% endif %}" alt="Tuner Video Feed" style="max-width: 100%; max-height: 480px; width: auto; height: auto; display: {% if is_sandbox_running %}block{% else %}none{% endif %};" />
+
+                <div id="feed-placeholder" style="display: {% if is_sandbox_running %}none{% else %}flex{% endif %}; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; padding: 32px;">
+                    <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom: 12px; opacity: 0.6;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                    <p style="font-size: 1.05rem; font-weight: 500; margin-bottom: 4px;">Tuner Stream Inactive</p>
+                    <p style="font-size: 0.85rem;">Select a camera device and click "Start Tuner" to begin real-time tuning.</p>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <!-- Right Column: Interactive Parameter Tuning & Metrics -->
+    <div class="card">
+        <div class="card__header">
+            <h2 class="card__title">Check results</h2>
+        </div>
+        <div class="card__body">
+            <!-- Biometric Match Results -->
+            <h3 style="font-size: var(--font-size-base); margin-bottom: 12px;">Latest face check</h3>
+            <p style="font-size: 0.78rem; color: var(--color-text-muted);">A confirmed name belongs to the timed check below. Watch for repeated correct results; one match does not establish accuracy.</p>
+            <div style="background: var(--color-bg-primary); padding: 12px; border-radius: 6px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Match Status:</span>
+                    <span id="metric-match-status" class="badge badge--warning">No Active Stream</span>
+                </div>
+                <details class="tuner-details"><summary>Match scores</summary>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Best Distance:</span>
+                    <strong id="metric-best-distance">N/A</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>2nd Best Distance:</span>
+                    <strong id="metric-second-distance">N/A</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Distance Margin:</span>
+                    <strong id="metric-margin">N/A</strong>
+                </div>
+                </details>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Confirmed name in this check:</span>
+                    <strong id="metric-matched-student">N/A</strong>
+                </div>
+            </div>
+            <p id="metric-match-context" style="font-size: 0.78rem; color: var(--color-text-muted);">No comparisons yet.</p>
+            <details class="tuner-details"><summary>Recent face checks</summary>
+            <p style="font-size: 0.78rem; color: var(--color-text-muted);">When several faces are checked together, their boxes are numbered in Recognition boxes view. Match each result to the number in that checked frame. Numbers can change between frames. These are recent checks, not current identities or an accuracy score. History clears when the tuner stops.</p>
+            <div id="match-history" role="region" aria-label="Recent face checks" tabindex="0" style="white-space: pre-line; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; font-size: 0.82rem;">No comparisons yet.</div>
+            </details>
+            <details class="tuner-details"><summary>Performance details</summary>
+
+            <p id="sandbox-metrics-status" role="status" style="font-size: 0.82rem; color: var(--color-text-muted);">Start the tuner to measure performance.</p>
+            <dl style="display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 0.88rem; margin-bottom: 12px;">
+                <dt>Camera input</dt><dd id="metric-capture-fps" style="margin: 0;">-- FPS</dd>
+                <dt>Live preview</dt><dd id="metric-preview-fps" style="margin: 0;">-- FPS</dd>
+                <dt>Recognition processing</dt><dd id="metric-fps" style="margin: 0;">-- FPS</dd>
+                <dt>Latest preview frame age</dt><dd id="metric-preview-age" style="margin: 0;">-- ms</dd>
+            </dl>
+            <p style="font-size: 0.78rem; color: var(--color-text-muted);">Recognition processing includes tracking between detection passes. Frame age is measured at the server after capture; it excludes delay inside the camera and in this browser.</p>
+            <p style="font-size: 0.82rem; color: var(--color-text-muted);">Stage times below are rolling averages of measured work. A stage may run only on detection passes or while a face is being checked. Bars compare stage times; these averages do not add up to a processing cycle.</p>
+
+            <div class="latency-list" style="display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem;">
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <span>Face Detection</span>
+                        <strong id="metric-detection">-- ms</strong>
+                    </div>
+                    <div style="background: var(--color-border); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="bar-detection" style="height: 100%; background: #3b82f6; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <span>Face Tracking Setup</span>
+                        <strong id="metric-tracker-init">-- ms</strong>
+                    </div>
+                    <div style="background: var(--color-border); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="bar-tracker-init" style="height: 100%; background: #0891b2; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <span>Face Tracking Movement</span>
+                        <strong id="metric-tracker-update">-- ms</strong>
+                    </div>
+                    <div style="background: var(--color-border); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="bar-tracker-update" style="height: 100%; background: #0d9488; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <span>Liveness Verification</span>
+                        <strong id="metric-liveness">-- ms</strong>
+                    </div>
+                    <div style="background: var(--color-border); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="bar-liveness" style="height: 100%; background: #8b5cf6; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <span>Vector Embedding</span>
+                        <strong id="metric-embedding">-- ms</strong>
+                    </div>
+                    <div style="background: var(--color-border); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="bar-embedding" style="height: 100%; background: #ec4899; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <span>Vector Matching</span>
+                        <strong id="metric-matching">-- ms</strong>
+                    </div>
+                    <div style="background: var(--color-border); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="bar-matching" style="height: 100%; background: #10b981; width: 0%; transition: width 0.2s;"></div>
+                    </div>
+                </div>
+
+                <div style="padding-top: 6px; border-top: 1px solid var(--color-border); display: flex; justify-content: space-between;">
+                    <span style="font-weight: 600;">Average Processing Cycle</span>
+                    <strong id="metric-total" style="font-weight: 700; color: var(--color-accent);">-- ms</strong>
+                </div>
+            </div>
+
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--color-border);" />
+
+            </details>
+
+            <details class="tuner-details">
+                <summary>Help with this camera check</summary>
+                <p><strong>Picture delayed?</strong> Try Smooth live view. If movement still lags, check this computer's <a href="{{ url_for('diagnostics.diagnostics_index') }}">capacity monitor</a> and camera connection.</p>
+                <p><strong>Face missed?</strong> Improve the lighting, face the camera and check the normal attendance distance. Repeat with both enrolled and unenrolled volunteers.</p>
+                <p><strong>Wrong name?</strong> Stop the test and review the enrollment and recognition results before using automatic attendance.</p>
+                <p class="tuner-help">A smooth picture does not prove recognition accuracy. Repeat these checks on each computer and camera setup before using attendance.</p>
+            </details>
+        </div>
+    </div>
+</div>
+
+<section class="card tuner-advanced" aria-label="Advanced recognition settings">
+    <details class="tuner-details">
+        <summary>Advanced settings</summary>
+            <form id="sandbox-overrides-form">
+                <p class="tuner-help">These settings can change recognition results. Keep the saved values for the first check. Test any changes with the intended laptop, camera and consenting participants before saving them.</p>
+                <p id="tuner-settings-status" class="tuner-settings-status" role="status">Saved values are shown. Changes stay in these controls until you start a test or click Test these settings.</p>
+                <!-- Optional Liveness Toggle Switch -->
+                <div class="form-group" style="margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border);">
+                    <label for="require-liveness" class="form-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                        <div>
+                            <span style="font-weight: 600; display: block;">Require Blink Verification</span>
+                            <span style="font-size: 0.78rem; color: var(--color-text-muted);">Requires a detected blink before confirmation. This can make attendance harder at a distance; it does not prove a live person by itself.</span>
+                        </div>
+                        <span>
+                            <input type="checkbox" id="require-liveness" {% if config.REQUIRE_LIVENESS %}checked{% endif %}>
+                            <span id="require-liveness-status" class="badge badge--warning">{{ 'Required' if config.REQUIRE_LIVENESS else 'Advisory' }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Match Confirmation Passes Slider -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label for="slider-confirmation-passes" class="form-label" style="display: flex; justify-content: space-between; font-weight: 500;">
+                        <span>Repeated checks before confirming</span>
+                        <span id="val-confirmation-passes" class="badge badge--primary">{{ config.MATCH_CONFIRMATION_PASSES }}</span>
+                    </label>
+                    <input type="range" id="slider-confirmation-passes" min="2" max="5" step="1" value="{{ config.MATCH_CONFIRMATION_PASSES }}" class="form-control-range" style="width: 100%; margin-top: 6px;" />
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted);">
+                        <span>2 confirmations</span>
+                        <span>5 confirmations</span>
+                    </div>
+                </div>
+
+                <!-- Match Threshold Slider -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+                        <input type="checkbox" id="use-normal-match-limit" checked />
+                        Use the camera's normal attendance match limit
+                    </label>
+                    <label for="slider-match-threshold" class="form-label" style="display: flex; justify-content: space-between; font-weight: 500;">
+                        <span>Manual match limit for this test</span>
+                        <span id="val-match-threshold" class="badge badge--primary">{{ config.MATCH_THRESHOLD }}</span>
+                    </label>
+                    <input type="range" id="slider-match-threshold" min="0.35" max="0.55" step="0.01" value="{{ config.MATCH_THRESHOLD }}" aria-describedby="tuner-match-limits tuner-match-policy" class="form-control-range" style="width: 100%; margin-top: 6px;" />
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted);">
+                        <span>0.35 (Stricter)</span>
+                        <span>0.55 (More permissive)</span>
+                    </div>
+                    <p id="tuner-match-limits" class="tuner-help" role="status" aria-live="polite">Choose a camera to see its normal attendance limit.</p>
+                    <p id="tuner-match-policy" class="tuner-help">The first test uses the stricter saved system or camera limit. Moving this slider or clearing the checkbox selects a manual override. Recheck the box to return to normal matching, then click Test these settings. Saving with normal matching selected keeps the saved system match limit unchanged.</p>
+                </div>
+
+                <p class="tuner-help">A higher match limit can accept a different person. Do not raise it to fix a slow picture.</p>
+                <!-- Match Margin Slider -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label for="match_margin" class="form-label" style="display: flex; justify-content: space-between; font-weight: 500;">
+                        <span>Separation from other profiles</span>
+                        <span id="match_margin_val" class="badge badge--primary">{{ config.MATCH_MARGIN if config.MATCH_MARGIN is defined else 0.08 }}</span>
+                    </label>
+                    <input type="range" class="form-range" id="match_margin" min="0.08" max="0.20" step="0.01" value="{{ config.MATCH_MARGIN if config.MATCH_MARGIN is defined else 0.08 }}" style="width: 100%; margin-top: 6px;" />
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted);">
+                        <span>0.08 (Smaller separation)</span>
+                        <span>0.20 (Larger separation, stricter)</span>
+                    </div>
+                </div>
+
+                <!-- Downscale Height Slider -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label for="downscale_height" class="form-label" style="display: flex; justify-content: space-between; font-weight: 500;">
+                        <span>Image detail for matching</span>
+                        <span id="downscale_height_val" class="badge badge--primary">{{ config.DOWNSCALE_HEIGHT if config.DOWNSCALE_HEIGHT is defined else 480 }}</span>
+                    </label>
+                    <input type="range" class="form-range" id="downscale_height" min="480" max="1080" step="10" value="{{ config.DOWNSCALE_HEIGHT if config.DOWNSCALE_HEIGHT is defined else 480 }}" style="width: 100%; margin-top: 6px;" />
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted);">
+                        <span>480 pixels</span>
+                        <span>1080 pixels</span>
+                    </div>
+                </div>
+
+                <p class="tuner-help">Higher values keep more camera detail for checking identity. Face detection uses a separate limit of up to {{ face_detection_height }} pixels in height; this control does not change that limit. The camera must supply enough detail.</p>
+                <!-- Frame Skip Interval Slider -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label for="slider-skip-interval" class="form-label" style="display: flex; justify-content: space-between; font-weight: 500;">
+                        <span>How often to look for faces</span>
+                        <span id="val-skip-interval" class="badge badge--primary">{{ config.FRAME_SKIP_INTERVAL }}</span>
+                    </label>
+                    <input type="range" id="slider-skip-interval" min="1" max="10" step="1" value="{{ config.FRAME_SKIP_INTERVAL }}" class="form-control-range" style="width: 100%; margin-top: 6px;" />
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted);">
+                        <span>1 (Every Frame)</span>
+                        <span>10 (Detect every 10 processed frames)</span>
+                    </div>
+                </div>
+                <p class="tuner-help">Checking fewer frames can miss brief appearances. These controls affect this test only until you explicitly save or apply them below.</p>
+                <div class="tuner-actions">
+                    <button type="button" id="btn-test-settings" class="btn btn--primary">Test these settings</button>
+                    <button type="button" id="btn-reset-settings" class="btn btn--secondary">Reset sliders to saved values</button>
+                </div>
+                {% if has_permission('manage_recognition_settings') %}
+                <details class="tuner-details">
+                    <summary>Use these settings for attendance</summary>
+                    <p class="tuner-help">Only use settings that have passed your camera checks. Saving sets system defaults for future sessions; stricter camera limits still apply when attendance starts. Apply overrides ongoing attendance sessions only and does not change future starts.</p>
+                    <p id="tuner-camera-limits-message" class="tuner-help" role="status"></p>
+                    <div class="tuner-actions">
+                        <button type="button" id="btn-open-save-modal" class="btn btn--secondary">Save for future sessions</button>
+                        <button type="button" id="btn-apply-live" class="btn btn--secondary">Apply to ongoing attendance</button>
+                    </div>
+                </details>
+                {% endif %}
+            </form>
+    </details>
+</section>
+
+<!-- Save to Config Confirmation Modal -->
+<div id="save-config-modal" class="modal viewport-modal" aria-hidden="true" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card viewport-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="save-config-title" aria-describedby="save-config-description" tabindex="-1" style="background: var(--color-bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);">
+        <div class="card__header" style="border-bottom: 1px solid var(--color-border); padding-bottom: 12px; margin-bottom: 16px;">
+            <h3 id="save-config-title" style="margin: 0;">Save for future sessions</h3>
+        </div>
+        <div class="card__body">
+            <p id="save-config-description" style="font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 16px;">
+                Save these values as system defaults for future recognition sessions? Stricter camera limits still apply when attendance starts. Check them on the intended laptop and camera first. Existing sessions keep their current settings.
+            </p>
+
+            <div style="background: var(--color-bg-primary); padding: 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Require Liveness:</span>
+                    <strong id="confirm-val-liveness">--</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Confirmation Passes:</span>
+                    <strong id="confirm-val-passes">--</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Match Threshold:</span>
+                    <strong id="confirm-val-threshold">--</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Match Margin:</span>
+                    <strong id="confirm-val-margin">--</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Downscale Height:</span>
+                    <strong id="confirm-val-downscale">--</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Frame Skip Interval:</span>
+                    <strong id="confirm-val-skip">--</strong>
+                </div>
+            </div>
+
+            <div class="mobile-action-row" style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button type="button" id="btn-cancel-save-modal" class="btn btn--secondary">Cancel</button>
+                <button type="button" id="btn-confirm-save-config" class="btn btn--primary">Confirm & Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/mjpeg-watchdog.js') }}"></script>
+<script src="{{ url_for('static', filename='js/sandbox.js', v='2') }}"></script>
+{% endblock %}

@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+{% block title %}User Management - CSD FARS{% endblock %}
+
+{% block head %}
+<style>
+.system-accounts-table th:not(:last-child), .system-accounts-table td:not(:last-child) { padding-right: 16px !important; }
+.system-accounts-table th, .system-accounts-table td:first-child { white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set create_values = create_values or {} %}
+<div class="header">
+    <h2>User Management</h2>
+    <p class="text-muted">Create staff accounts and manage their access to CSD FARS.</p>
+</div>
+
+<div class="grid responsive-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-xl); margin-top: var(--space-lg);">
+    <!-- Create User Form -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <h3 style="margin-bottom: var(--space-md);">Create staff account</h3>
+        {% if create_error %}
+        <div id="create-user-error" role="alert" tabindex="-1" style="margin-bottom: var(--space-md); padding: var(--space-md); border: 1px solid var(--color-error); border-radius: var(--radius-sm); color: var(--color-error);">
+            <strong>{{ create_error }}</strong>
+            <p style="margin-top: var(--space-xs);">No account was created. Your staff details are kept below. Enter the temporary password again before retrying.</p>
+        </div>
+        {% endif %}
+        <form id="create-user-form" method="POST" action="{{ url_for('admin.admin_users') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label for="staff_id" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Staff ID</label>
+                <input type="text" id="staff_id" name="staff_id" required autocomplete="off" placeholder="e.g. EMP-101" value="{{ create_values.staff_id }}" {% if create_error_field == 'staff_id' %}aria-invalid="true" aria-describedby="create-user-error"{% endif %}
+                       style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            </div>
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label for="username" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Username</label>
+                <input type="text" id="username" name="username" required autocomplete="off" value="{{ create_values.username }}" {% if create_error_field == 'username' %}aria-invalid="true" aria-describedby="create-user-error"{% endif %}
+                       style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label for="password" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Temporary Password</label>
+                <div class="password-field">
+                    <input type="password" id="password" name="password" required autocomplete="new-password" aria-describedby="password-requirements initial-password-hint{% if create_error_field == 'password' %} create-user-error{% endif %}" {% if create_error_field == 'password' %}aria-invalid="true"{% endif %}
+                           style="width: 100%; padding: var(--space-sm) 5rem var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <button type="button" class="toggle-password-btn" data-password-visibility="password" aria-controls="password" aria-label="Show temporary password" aria-pressed="false">Show</button>
+                </div>
+                {% include "includes/password_requirements.html" %}
+                <p id="initial-password-hint" class="form-hint">Give this temporary password privately to the account holder. They must choose their own password when they first sign in.</p>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="role" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Role</label>
+                <select id="role" name="role" required {% if create_error_field == 'role' %}aria-invalid="true" aria-describedby="create-user-error"{% endif %}
+                        style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <option value="" disabled {% if create_values.role not in ['Teacher', 'Dean', 'IT_Support', 'Office_Admin'] %}selected{% endif %}>Select role...</option>
+                    {% for value, label in [('Teacher', 'Teacher'), ('Dean', 'Dean'), ('IT_Support', 'IT Support'), ('Office_Admin', 'Office Admin')] %}
+                    <option value="{{ value }}" {% if create_values.role == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <button type="submit" id="create-user-submit" class="btn btn--primary" style="width: 100%; background: var(--color-accent); color: white; padding: var(--space-sm) var(--space-md); border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: var(--font-weight-medium);">
+                Create Account
+            </button>
+        </form>
+    </div>
+
+    <!-- Users Table -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border);">
+        <h3 style="margin-bottom: var(--space-md);">System Accounts</h3>
+        <p id="account-action-feedback" role="alert" tabindex="-1" hidden></p>
+        <button type="button" id="account-action-reload" class="btn btn--secondary" hidden>Reload Saved Accounts</button>
+        <div class="responsive-table-region" role="region" aria-label="Scrollable system accounts" tabindex="0" style="overflow-x: auto;">
+            <table class="system-accounts-table" aria-label="System accounts" style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead>
+                    <tr style="border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary);">
+                        <th style="padding: var(--space-sm) 0;">Staff ID</th>
+                        <th style="padding: var(--space-sm) 0;">Username</th>
+                        <th style="padding: var(--space-sm) 0;">Role</th>
+                        <th style="padding: var(--space-sm) 0;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr style="border-bottom: 1px solid var(--color-border);{% if not user.is_active %} opacity: 0.65;{% endif %}">
+                        <td style="padding: var(--space-md) 0; color: var(--color-text-muted);">{{ user.staff_id }}</td>
+                        <td style="padding: var(--space-md) 0; font-weight: var(--font-weight-medium);">{{ user.username }}</td>
+                        <td style="padding: var(--space-md) 0;">
+                            <span style="display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--font-size-xs); background: var(--color-bg-input); color: var(--color-info);">
+                                {{ user.role | replace('_', ' ') }}
+                            </span>
+                            {% if not user.is_active %}
+                            <span style="display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--font-size-xs); background: #fef2f2; color: var(--color-error); margin-left: var(--space-sm);">
+                                Inactive
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td style="padding: var(--space-md) 0; display: flex; flex-wrap: wrap; gap: var(--space-sm);">
+                            <button type="button" class="js-user-edit" aria-label="Edit {{ user.username }}" data-user-id="{{ user.id }}" data-staff-id="{{ user.staff_id }}" data-username="{{ user.username }}" data-role="{{ user.role }}" style="background: transparent; border: none; color: var(--color-accent); cursor: pointer; padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--font-size-sm); transition: background 0.2s;" onmouseover="this.style.background='var(--color-bg-input)'" onmouseout="this.style.background='transparent'">Edit</button>
+                            <button type="button" class="js-user-reset" aria-label="Reset password for {{ user.username }}" data-self="{{ 'true' if user.id == session.user_id else 'false' }}" data-user-id="{{ user.id }}" data-username="{{ user.username }}" style="background: transparent; border: none; color: var(--color-warning); cursor: pointer; padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--font-size-sm); transition: background 0.2s;" onmouseover="this.style.background='var(--color-bg-input)'" onmouseout="this.style.background='transparent'">Reset Password</button>
+                            {% if user.id == session.user_id %}
+                            <button type="button" disabled aria-label="Deactivate {{ user.username }} (your account)" title="You cannot deactivate your own account" style="background: transparent; border: none; color: var(--color-text-muted); cursor: not-allowed; padding: 2px 6px; font-size: var(--font-size-sm);">Deactivate</button>
+                            {% else %}
+                            <button type="button" class="js-user-toggle-status" aria-label="{{ 'Deactivate' if user.is_active else 'Activate' }} {{ user.username }}" data-active="{{ 'true' if user.is_active else 'false' }}" data-user-id="{{ user.id }}" data-username="{{ user.username }}" style="background: transparent; border: none; color: {% if user.is_active %}var(--color-error){% else %}var(--color-success){% endif %}; cursor: pointer; padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--font-size-sm); transition: background 0.2s;" onmouseover="this.style.background='var(--color-bg-input)'" onmouseout="this.style.background='transparent'">
+                                {% if user.is_active %}Deactivate{% else %}Activate{% endif %}
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" style="padding: var(--space-md) 0; text-align: center; color: var(--color-text-muted);">No accounts found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if maintenance_purge_enabled %}
+    <!-- Maintenance-only Data Privacy Manager / Purge -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-error); margin-top: var(--space-xl); grid-column: 1 / -1;">
+        <h3 style="margin-bottom: var(--space-md); color: var(--color-error);">Semester Reset / Data Purge</h3>
+        <p style="color: var(--color-text-secondary); margin-bottom: var(--space-lg);">
+            <strong>WARNING:</strong> This creates an encrypted recovery archive, then deletes attendance sessions and records, class roster assignments and enrollment history, biometric embeddings, and attendance audit logs. Pending registration requests are rejected and their biometric data is cleared. User accounts, student profiles, class definitions, and system audit events remain. This cannot be undone from this page; restoring data requires an authorized recovery.
+        </p>
+        <div style="background: var(--color-bg-input); padding: var(--space-md); border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+            <label for="purge_confirm" style="display: block; margin-bottom: var(--space-sm); font-weight: var(--font-weight-medium);">Type <strong>PURGE</strong> to confirm:</label>
+            <div class="maintenance-purge-controls" style="display: flex; gap: var(--space-md);">
+                <input type="text" id="purge_confirm" autocomplete="off" placeholder="PURGE" style="flex: 1; padding: var(--space-sm); border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-bg-card); color: var(--color-text-primary);">
+                <button type="button" id="btn-purge" disabled style="background: var(--color-error); color: white; border: none; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); font-weight: bold; cursor: not-allowed; opacity: 0.5; transition: opacity 0.2s;">
+                    Execute Purge
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Edit User Modal -->
+<div id="editModal" role="dialog" aria-modal="true" aria-labelledby="edit-user-title" aria-hidden="true" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: var(--space-md);">
+    <div tabindex="-1" style="background-color: var(--color-bg-card); padding: var(--space-lg); border: 1px solid var(--color-border); width: min(400px, 100%); border-radius: var(--radius-lg); box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+            <h3 id="edit-user-title" style="margin: 0;">Edit User Account</h3>
+            <button type="button" id="btn-close-edit-user" aria-label="Close edit user dialog" style="background: transparent; border: none; color: var(--color-text-secondary); font-size: 24px; font-weight: bold; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editForm">
+            <p id="edit-user-error" role="alert" tabindex="-1" hidden style="color: var(--color-error); margin-bottom: var(--space-md);"></p>
+            <button type="button" id="edit-user-reload" class="btn btn--secondary" hidden>Reload Saved Accounts</button>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" id="edit_user_id">
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label for="edit_staff_id" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Staff ID</label>
+                <input type="text" id="edit_staff_id" required autocomplete="off"
+                       style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            </div>
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label for="edit_username" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Username</label>
+                <input type="text" id="edit_username" required autocomplete="off"
+                       style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            </div>
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="edit_role" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm); color: var(--color-text-secondary);">Role</label>
+                <select id="edit_role" required
+                        style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <option value="Teacher">Teacher</option>
+                    <option value="Dean">Dean</option>
+                    <option value="IT_Support">IT Support</option>
+                    <option value="Office_Admin">Office Admin</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: var(--space-md); justify-content: flex-end;">
+                <button type="button" id="btn-cancel-edit-user" style="background: transparent; border: 1px solid var(--color-border); color: var(--color-text-primary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); cursor: pointer;">Cancel</button>
+                <button type="submit" id="btn-save-edit-user" style="background: var(--color-accent); color: white; padding: var(--space-sm) var(--space-md); border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: var(--font-weight-medium);">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const createForm = document.getElementById('create-user-form');
+    const createSubmit = document.getElementById('create-user-submit');
+    let createPending = false;
+    let accountBusy = false;
+    let accountUncertain = false;
+    let lockedAccountControls = [];
+    const accountFeedback = document.getElementById('account-action-feedback');
+    const accountReload = document.getElementById('account-action-reload');
+    const editReload = document.getElementById('edit-user-reload');
+    [accountReload, editReload].forEach(button => button.addEventListener('click', () => window.location.reload()));
+
+    function beginAccountAction() {
+        if (accountBusy || createPending || accountUncertain) return false;
+        accountBusy = true;
+        accountFeedback.hidden = true;
+        accountReload.hidden = true;
+        lockedAccountControls = [...document.querySelectorAll('.js-user-edit, .js-user-reset, .js-user-toggle-status'), createSubmit]
+            .map(control => ({control, disabled: control.disabled}));
+        lockedAccountControls.forEach(({control}) => { control.disabled = true; });
+        return true;
+    }
+
+    function endAccountAction() {
+        if (accountUncertain) return;
+        lockedAccountControls.forEach(({control, disabled}) => { control.disabled = disabled; });
+        lockedAccountControls = [];
+        accountBusy = false;
+    }
+
+    function uncertainAccountAction(message) {
+        accountUncertain = true;
+        accountFeedback.textContent = message;
+        accountFeedback.hidden = false;
+        accountReload.hidden = false;
+        accountFeedback.focus();
+    }
+
+    async function accountRequest(url, body) {
+        const controller = new AbortController();
+        let timeout;
+        const deadline = new Promise((_, reject) => {
+            timeout = window.setTimeout(() => {
+                const error = new Error('The request took too long.');
+                error.name = 'AbortError';
+                reject(error);
+                controller.abort();
+            }, 15000);
+        });
+        try {
+            return await Promise.race([(async () => {
+                const response = await fetch(url, {
+                    method: 'POST', signal: controller.signal,
+                    headers: {'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')},
+                    ...(body === undefined ? {} : {body: JSON.stringify(body)})
+                });
+                return {response, data: await AuthResponse.readJson(response)};
+            })(), deadline]);
+        } finally {
+            window.clearTimeout(timeout);
+        }
+    }
+
+    createForm.addEventListener('submit', event => {
+        if (event.defaultPrevented) return; // Local password correction keeps this form usable.
+        if (createPending || accountBusy || accountUncertain) {
+            event.preventDefault();
+            return;
+        }
+        createPending = true;
+        createForm.setAttribute('aria-busy', 'true');
+        createSubmit.disabled = true;
+        createSubmit.textContent = 'Creating Account...';
+    });
+    window.addEventListener('pageshow', () => {
+        createPending = false;
+        createForm.removeAttribute('aria-busy');
+        createSubmit.disabled = accountBusy || accountUncertain;
+        createSubmit.textContent = 'Create Account';
+    });
+    document.getElementById('create-user-error')?.focus();
+
+    const purgeInput = document.getElementById('purge_confirm');
+    const btnPurge = document.getElementById('btn-purge');
+
+    if (purgeInput && btnPurge) purgeInput.addEventListener('input', (e) => {
+        if (e.target.value === 'PURGE') {
+            btnPurge.disabled = false;
+            btnPurge.style.cursor = 'pointer';
+            btnPurge.style.opacity = '1';
+        } else {
+            btnPurge.disabled = true;
+            btnPurge.style.cursor = 'not-allowed';
+            btnPurge.style.opacity = '0.5';
+        }
+    });
+
+    if (purgeInput && btnPurge) btnPurge.addEventListener('click', async () => {
+        AppModal.confirm("Are you absolutely sure you want to purge all attendance data? This cannot be undone.", async () => {
+            btnPurge.disabled = true;
+            btnPurge.innerText = "Purging...";
+            
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                const res = await fetch('/api/admin/purge', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ confirm: "PURGE" })
+                });
+                const data = await AuthResponse.readJson(res);
+                if (AuthResponse.redirectIfUnauthorized(res, data)) return;
+                
+                if (res.ok) {
+                    AppModal.alert(data.message, 'Purge Complete', () => window.location.reload());
+                } else {
+                    AppModal.alert(data.error || "Purge failed.");
+                    btnPurge.disabled = false;
+                    btnPurge.innerText = "Execute Purge";
+                }
+            } catch (err) {
+                console.error(err);
+                AppModal.alert("Error executing purge.");
+                btnPurge.disabled = false;
+                btnPurge.innerText = "Execute Purge";
+            }
+        });
+    });
+
+    // Edit Modal Controllers
+    const editModal = document.getElementById('editModal');
+    const editForm = document.getElementById('editForm');
+    const editSubmit = document.getElementById('btn-save-edit-user');
+    const editError = document.getElementById('edit-user-error');
+    const editDialog = editModal.querySelector('[tabindex="-1"]');
+    let editModalReturnFocus = null;
+    let editPending = false;
+    let editUncertain = false;
+
+    function setEditPending(pending) {
+        editPending = pending;
+        editModal.setAttribute('aria-busy', pending ? 'true' : 'false');
+        editForm.querySelectorAll('input, select, button').forEach(control => {
+            control.disabled = pending;
+        });
+        editSubmit.textContent = pending ? 'Saving...' : 'Save Changes';
+        if (editUncertain) editSubmit.disabled = true;
+        editReload.disabled = pending;
+    }
+
+    function openEditModal(userId, staffId, username, role, trigger) {
+        if (editPending || !beginAccountAction()) return;
+        editModalReturnFocus = trigger || document.activeElement;
+        document.getElementById('edit_user_id').value = userId;
+        document.getElementById('edit_staff_id').value = staffId;
+        document.getElementById('edit_username').value = username;
+        document.getElementById('edit_role').value = role;
+        editError.hidden = true;
+        editError.textContent = '';
+        editUncertain = false;
+        editReload.hidden = true;
+        editModal.style.display = 'flex';
+        editModal.setAttribute('aria-hidden', 'false');
+        document.getElementById('edit_staff_id').focus();
+    }
+
+    function closeEditModal() {
+        if (editPending) return;
+        editModal.style.display = 'none';
+        editModal.setAttribute('aria-hidden', 'true');
+        endAccountAction();
+        if (accountUncertain) accountFeedback.focus();
+        else if (editModalReturnFocus?.isConnected) editModalReturnFocus.focus();
+        editModalReturnFocus = null;
+    }
+
+    document.getElementById('btn-close-edit-user').addEventListener('click', closeEditModal);
+    document.getElementById('btn-cancel-edit-user').addEventListener('click', closeEditModal);
+    editModal.addEventListener('click', event => {
+        if (event.target === editModal) closeEditModal();
+    });
+    editModal.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeEditModal();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const controls = Array.from(editModal.querySelectorAll('input:not([type="hidden"]):not([disabled]), select:not([disabled]), button:not([disabled]):not([hidden])'));
+        if (!controls.length) {
+            event.preventDefault();
+            editDialog.focus();
+            return;
+        }
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (!controls.includes(document.activeElement)) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    });
+
+    document.querySelectorAll('.js-user-edit').forEach((button) => {
+        button.addEventListener('click', () => {
+            openEditModal(
+                button.dataset.userId,
+                button.dataset.staffId,
+                button.dataset.username,
+                button.dataset.role,
+                button
+            );
+        });
+    });
+
+    document.querySelectorAll('.js-user-reset').forEach((button) => {
+        button.addEventListener('click', () => resetPassword(
+            button.dataset.userId,
+            button.dataset.username,
+            button
+        ));
+    });
+
+    document.querySelectorAll('.js-user-toggle-status').forEach((button) => {
+        button.addEventListener('click', () => toggleStatus(
+            button.dataset.userId,
+            button.dataset.username,
+            button
+        ));
+    });
+
+    function releaseUserAction(trigger) {
+        ActionLock.release(trigger);
+        endAccountAction();
+        if (trigger?.isConnected) trigger.focus();
+    }
+
+    editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (editPending || editUncertain) return;
+        editError.hidden = true;
+        editError.textContent = '';
+        setEditPending(true);
+        editDialog.focus();
+        let keepLocked = false;
+        const userId = document.getElementById('edit_user_id').value;
+        const staffId = document.getElementById('edit_staff_id').value.trim();
+        const username = document.getElementById('edit_username').value.trim();
+        const role = document.getElementById('edit_role').value;
+
+        try {
+            const {response: res, data} = await accountRequest(`/api/admin/users/${userId}/edit`,
+                {staff_id: staffId, username, role});
+            if (AuthResponse.redirectIfUnauthorized(res, data)) {
+                keepLocked = true;
+                return;
+            }
+            if (res.ok && typeof data?.message === 'string' && data.message.trim()) {
+                keepLocked = true;
+                AppModal.alert(data.message, 'User Updated', () => window.location.reload());
+            } else {
+                if (res.ok || res.status >= 500) throw new Error('Unconfirmed account update');
+                editError.textContent = data.message || data.error || 'Failed to update user.';
+                editError.hidden = false;
+                editError.focus();
+            }
+        } catch (err) {
+            editUncertain = true;
+            uncertainAccountAction('Unable to confirm the account update. Reload Saved Accounts to check whether it was saved before retrying.');
+            editReload.hidden = false;
+            editError.textContent = err.name === 'AbortError'
+                ? 'The update took too long. Close this dialog and refresh the account list to check whether it was saved before retrying.'
+                : 'Unable to confirm the update. Check your connection, then refresh the account list before retrying.';
+            editError.hidden = false;
+            editError.focus();
+        } finally {
+            if (!keepLocked) setEditPending(false);
+        }
+    });
+
+    // Reset Password Controller
+    function resetPassword(userId, username, trigger) {
+        if (!beginAccountAction()) return;
+        if (!ActionLock.tryLock(trigger, 'Resetting...')) return;
+        const selfReset = trigger.dataset.self === 'true';
+        const resetWarning = selfReset
+            ? ' This is your account. Copy the temporary password before closing the result; you must sign in again and choose a new password. If the response is lost, ask another Dean or the installation technician for recovery.'
+            : ' The account holder must choose a new password on their next sign-in.';
+        AppModal.confirm(`Reset the password for '${username}'? Their current password will stop working. They must sign in again on all devices. A temporary password will be generated and shown once.\n\nThis does not reactivate an inactive account or remove a temporary sign-in lock.${resetWarning}`, async () => {
+            try {
+                const {response: res, data} = await accountRequest(`/api/admin/users/${userId}/reset_password`);
+                if (AuthResponse.redirectIfUnauthorized(res, data)) return;
+                if (res.ok) {
+                    if (typeof data?.temp_password !== 'string' || !data.temp_password.trim()) throw new Error('Missing reset result');
+                    AppModal.alert(
+                        `${data.message || 'Password reset.'}\n\nUsername: ${username}\nTemporary password: ${data.temp_password}\n\nCopy this now; it will not be shown again. ${selfReset ? 'Sign in again with this temporary password, then choose your own password.' : 'Give these sign-in details privately to the account holder. They must sign in with the temporary password, then choose their own password.'}`,
+                        'Password Reset',
+                        () => {
+                            if (selfReset) window.location.href = '/login';
+                            else releaseUserAction(trigger);
+                        }
+                    );
+                } else {
+                    if (res.status >= 500) throw new Error('Unconfirmed reset');
+                    AppModal.alert(
+                        data?.message || data?.error || "Failed to reset password.",
+                        'Reset Failed',
+                        () => releaseUserAction(trigger)
+                    );
+                }
+            } catch (err) {
+                uncertainAccountAction(`The password reset for '${username}' could not be confirmed. It may have changed, but no usable temporary password was received. Reload Saved Accounts before any further action. ${selfReset ? 'If you cannot sign in, ask another Dean or the installation technician for recovery.' : 'If the account holder cannot sign in, a Dean must deliberately reset it again and provide the new temporary password.'}`);
+            }
+        }, () => releaseUserAction(trigger), 'Reset password?');
+    }
+
+    // Toggle Active Status Controller
+    function toggleStatus(userId, username, trigger) {
+        if (!beginAccountAction()) return;
+        if (!ActionLock.tryLock(trigger, 'Updating...')) return;
+        const desiredActive = trigger.dataset.active !== 'true';
+        AppModal.confirm(`${desiredActive ? 'Activate' : 'Deactivate'} '${username}'?`, async () => {
+            try {
+                const {response: res, data} = await accountRequest(`/api/admin/users/${userId}/toggle_status`, {is_active: desiredActive});
+                if (AuthResponse.redirectIfUnauthorized(res, data)) return;
+                if (res.ok) {
+                    if (![0, 1, false, true].includes(data?.is_active) || Boolean(data.is_active) !== desiredActive) throw new Error('Missing saved status');
+                    AppModal.alert(data.message, 'User Status Updated', () => window.location.reload());
+                } else {
+                    if (res.status >= 500) throw new Error('Unconfirmed status');
+                    releaseUserAction(trigger);
+                    accountFeedback.textContent = data?.message || data?.error || 'Failed to change user status.';
+                    accountFeedback.hidden = false;
+                    accountFeedback.focus();
+                }
+            } catch (err) {
+                uncertainAccountAction(`The status update for '${username}' could not be confirmed. Reload Saved Accounts to check the saved status before retrying.`);
+            }
+        }, () => releaseUserAction(trigger));
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% macro status(item) -%}
+<span class="badge badge--{{ item.tone|default('secondary') }}">{{ item.label }}</span>
+{%- endmacro %}
+
+{% macro action(item) -%}
+{% if item.unfinished and session.role == 'Teacher' and not item.is_archived %}
+<a class="btn btn--primary btn--sm" href="{{ url_for('classes.class_session', class_id=item.class_id, session_id=item.id, session_date=item.scheduled_date) }}">{{ 'Open attendance' if item.label == 'In progress' else 'View session' }}</a>
+{% elif item.id and item.status not in ('Missed','Cancelled') %}
+<a class="btn btn--primary btn--sm" href="{{ url_for('classes.class_session_report', class_id=item.class_id, attendance_session_id=item.id) }}">{{ 'Review attendance' if item.pending_count else 'View results' }}</a>
+{% else %}
+<a class="btn btn--secondary btn--sm" href="{{ url_for('classes.session_preview', class_id=item.class_id, date=item.scheduled_date) }}">{{ 'Review and start' if item.window_open and session.role == 'Teacher' and not item.is_archived else 'View session details' }}</a>
+{% endif %}
+{%- endmacro %}

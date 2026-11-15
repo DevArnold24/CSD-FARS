@@ -1,0 +1,309 @@
+{
+  "bundledBrowserAssets": [
+    {
+      "licenseFile": "static/vendor/face-api/1.7.15/LICENSE",
+      "name": "face-api.js",
+      "version": "1.7.15"
+    },
+    {
+      "licenseFile": "static/vendor/chart.js/4.5.1/LICENSE.md",
+      "name": "Chart.js",
+      "version": "4.5.1"
+    }
+  ],
+  "bundledTools": [
+    {
+      "license": "Apache-2.0 OR MIT",
+      "licenseFiles": [
+        "tools/uv/LICENSE-APACHE",
+        "tools/uv/LICENSE-MIT"
+      ],
+      "name": "uv",
+      "version": "0.12.8"
+    },
+    {
+      "license": "Apache-2.0",
+      "licenseFiles": [
+        "tools/caddy/LICENSE"
+      ],
+      "name": "Caddy",
+      "sbomFile": "tools/caddy/SBOM.cdx.json",
+      "version": "2.11.4"
+    }
+  ],
+  "generatedFromInstalledOfflineEnvironment": true,
+  "pythonPackages": [
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/blinker-1.9.0/LICENSE.txt"
+      ],
+      "name": "blinker",
+      "version": "1.9.0"
+    },
+    {
+      "license": null,
+      "licenseExpression": "MIT-0",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/cffi-2.1.1/LICENSE"
+      ],
+      "name": "cffi",
+      "version": "2.1.1"
+    },
+    {
+      "license": null,
+      "licenseExpression": "BSD-3-Clause",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/click-8.5.0/LICENSE.txt"
+      ],
+      "name": "click",
+      "version": "8.5.0"
+    },
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/colorama-0.4.6/LICENSE.txt"
+      ],
+      "name": "colorama",
+      "version": "0.4.6"
+    },
+    {
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/cryptography-44.0.3/LICENSE",
+        "THIRD_PARTY_LICENSES/cryptography-44.0.3/LICENSE.APACHE",
+        "THIRD_PARTY_LICENSES/cryptography-44.0.3/LICENSE.BSD"
+      ],
+      "name": "cryptography",
+      "version": "44.0.3"
+    },
+    {
+      "license": "Boost Software License",
+      "licenseExpression": null,
+      "licenseFiles": [],
+      "name": "dlib",
+      "version": "19.24.1"
+    },
+    {
+      "license": "MIT",
+      "licenseExpression": null,
+      "licenseFiles": [],
+      "name": "et_xmlfile",
+      "version": "2.0.0"
+    },
+    {
+      "license": "MIT license",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/face-recognition-1.3.0/LICENSE"
+      ],
+      "name": "face-recognition",
+      "version": "1.3.0"
+    },
+    {
+      "license": "MIT license",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/face_recognition_models-0.3.0/LICENSE"
+      ],
+      "name": "face_recognition_models",
+      "version": "0.3.0"
+    },
+    {
+      "license": null,
+      "licenseExpression": "BSD-3-Clause",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/Flask-3.1.3/LICENSE.txt"
+      ],
+      "name": "Flask",
+      "version": "3.1.3"
+    },
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/Flask-WTF-1.2.1/LICENSE.rst"
+      ],
+      "name": "Flask-WTF",
+      "version": "1.2.1"
+    },
+    {
+      "license": null,
+      "licenseExpression": "MIT",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/gunicorn-26.0.0/LICENSE"
+      ],
+      "name": "gunicorn",
+      "version": "26.0.0"
+    },
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/itsdangerous-2.2.0/LICENSE.txt"
+      ],
+      "name": "itsdangerous",
+      "version": "2.2.0"
+    },
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/Jinja2-3.1.6/LICENSE.txt"
+      ],
+      "name": "Jinja2",
+      "version": "3.1.6"
+    },
+    {
+      "license": null,
+      "licenseExpression": "BSD-3-Clause",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/MarkupSafe-3.0.3/LICENSE.txt"
+      ],
+      "name": "MarkupSafe",
+      "version": "3.0.3"
+    },
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/numpy-1.26.4/2-LICENSE.txt",
+        "THIRD_PARTY_LICENSES/numpy-1.26.4/LICENSE",
+        "THIRD_PARTY_LICENSES/numpy-1.26.4/LICENSE.md",
+        "THIRD_PARTY_LICENSES/numpy-1.26.4/LICENSE.txt"
+      ],
+      "name": "numpy",
+      "version": "1.26.4"
+    },
+    {
+      "license": "Apache 2.0",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/opencv-python-4.11.0.86/3-LICENSE-3RD-PARTY.txt",
+        "THIRD_PARTY_LICENSES/opencv-python-4.11.0.86/4-LICENSE.txt",
+        "THIRD_PARTY_LICENSES/opencv-python-4.11.0.86/LICENSE-3RD-PARTY.txt",
+        "THIRD_PARTY_LICENSES/opencv-python-4.11.0.86/LICENSE.txt"
+      ],
+      "name": "opencv-python",
+      "version": "4.11.0.86"
+    },
+    {
+      "license": "MIT",
+      "licenseExpression": null,
+      "licenseFiles": [],
+      "name": "openpyxl",
+      "version": "3.1.5"
+    },
+    {
+      "license": null,
+      "licenseExpression": "Apache-2.0 OR BSD-2-Clause",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/packaging-26.3/LICENSE",
+        "THIRD_PARTY_LICENSES/packaging-26.3/LICENSE.APACHE",
+        "THIRD_PARTY_LICENSES/packaging-26.3/LICENSE.BSD"
+      ],
+      "name": "packaging",
+      "version": "26.3"
+    },
+    {
+      "license": null,
+      "licenseExpression": "MIT-CMU",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/pillow-12.3.0/LICENSE"
+      ],
+      "name": "pillow",
+      "version": "12.3.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/psutil-6.1.1/LICENSE"
+      ],
+      "name": "psutil",
+      "version": "6.1.1"
+    },
+    {
+      "license": null,
+      "licenseExpression": "BSD-3-Clause",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/pycparser-3.0/LICENSE"
+      ],
+      "name": "pycparser",
+      "version": "3.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/python-dotenv-1.2.2/LICENSE"
+      ],
+      "name": "python-dotenv",
+      "version": "1.2.2"
+    },
+    {
+      "license": null,
+      "licenseExpression": "MIT",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/12-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/13-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/15-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/17-NOTICE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/2-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/3-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/4-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/5-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/6-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/7-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/8-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/9-LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/LICENSE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/LICENSE.APACHE",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/LICENSE.BSD",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/LICENSE.txt",
+        "THIRD_PARTY_LICENSES/setuptools-80.10.2/NOTICE"
+      ],
+      "name": "setuptools",
+      "version": "80.10.2"
+    },
+    {
+      "license": "MIT",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/simpleaudio-1.0.4/LICENSE.txt"
+      ],
+      "name": "simpleaudio",
+      "version": "1.0.4"
+    },
+    {
+      "license": "ZPL 2.1",
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/waitress-3.0.2/LICENSE.txt"
+      ],
+      "name": "waitress",
+      "version": "3.0.2"
+    },
+    {
+      "license": null,
+      "licenseExpression": "BSD-3-Clause",
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/Werkzeug-3.1.8/LICENSE.txt"
+      ],
+      "name": "Werkzeug",
+      "version": "3.1.8"
+    },
+    {
+      "license": null,
+      "licenseExpression": null,
+      "licenseFiles": [
+        "THIRD_PARTY_LICENSES/WTForms-3.2.2/LICENSE.rst"
+      ],
+      "name": "WTForms",
+      "version": "3.2.2"
+    }
+  ]
+}

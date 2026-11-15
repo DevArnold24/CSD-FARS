@@ -1,0 +1,2 @@
+{% from 'classes/_schedule_time.html' import schedule_time -%}
+Class updated successfully. Schedule saved: {{ schedule.days_text|replace(',', ', ') }}, {{ schedule_time(schedule.start_time) }} to {{ schedule_time(schedule.end_time) }}, effective from {{ effective_from }} (school time).{% if deferred %} Today's saved session keeps its original schedule.{% endif %}

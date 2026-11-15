@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% from 'classes/_schedule_time.html' import schedule_time %}
+{% from 'classes/_session_state.html' import status, action with context %}
+{% block title %}Sessions{% if class_info %} - {{ class_info.course_name }}{% endif %} - CSD FARS{% endblock %}
+{% block content %}
+{% set endpoint = 'classes.class_session_history' if class_info else 'classes.session_agenda' %}
+{% set route_args = {'class_id': class_info.id} if class_info else {} %}
+<div class="page-header">
+  <div><h1 class="page-header__title">Sessions</h1>
+    <p class="page-header__subtitle">{% if class_info %}{{ class_info.course_name }} ({{ class_info.class_code }}){% else %}{{ 'Your assigned classes' if session.role == 'Teacher' else 'Department classes' }}{% endif %}</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="{{ url_for('classes.manage_classes') }}" class="btn btn--secondary">Back to Classes</a>
+    {% if class_info %}<a href="{{ url_for('reports.reports_index', date_scope='all', class_id=class_info.id) }}" class="btn btn--secondary">Class attendance in Reports</a>{% endif %}
+
+  </div>
+</div>
+<nav class="session-tabs" aria-label="Session views">
+{% for key,label in views.items() %}<a href="{{ url_for(endpoint, view=key, **route_args) }}" class="btn {{ 'btn--primary' if history_filters.view == key else 'btn--secondary' }}" {% if history_filters.view == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+<div class="card">
+  <div class="card__header">
+    <h2 class="card__title">{{ views[history_filters.view] }}</h2>
+    <p class="card__subtitle">{% if history_filters.view == 'review' %}Saved sessions with students still Pending, across all dates unless you select a range. Ending attendance does not complete its review. Archived classes remain read-only.
+    {% elif history_filters.view == 'upcoming' %}Meetings whose attendance has not opened yet, including later today and the next 30 days, or your selected dates. These previews do not start attendance or reserve a camera. Details are checked again when the teacher starts.
+    {% elif history_filters.view == 'today' %}Today's meetings and ongoing attendance, including unfinished sessions from other dates. Opening time is separate from class start. Start remains an explicit teacher action.
+    {% else %}Ended sessions and past dates without attendance. Ongoing or unfinished attendance remains under Today. Dates without attendance are shown for the last 30 days; select a range to find older missing records. No attendance recorded does not mean the class was not held or students were absent.{% endif %}</p>
+    <p class="text-muted">Times use the school's local time. Class names, room and teacher reflect current details; saved meeting times and attendance retain their history.</p>
+    {% if filter_error %}<div role="alert" class="alert alert--error">{{ filter_error }} <a href="{{ url_for(endpoint, **route_args) }}">Reset filters</a></div>{% endif %}
+    {% if history_filters.view != 'today' %}
+    <form method="get" class="session-filters">
+      <input type="hidden" name="view" value="{{ history_filters.view }}">
+      <div class="form-group"><label for="sessions-from">From</label><input id="sessions-from" type="date" name="start_date" value="{{ history_filters.start_date }}"></div>
+      <div class="form-group"><label for="sessions-through">Through</label><input id="sessions-through" type="date" name="end_date" value="{{ history_filters.end_date }}"></div>
+      {% if history_filters.view == 'past' %}<div class="form-group"><label for="sessions-state">Session state</label><select id="sessions-state" name="state"><option value="">All states</option>{% for value,label in [('Closed','Ended'),('Unrecorded','No attendance recorded'),('Cancelled','Cancelled')] %}<option value="{{ value }}" {% if history_filters.state == value or (value == 'Unrecorded' and history_filters.state == 'Missed') %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>{% endif %}
+      <div class="session-filter-actions"><button type="submit" class="btn btn--secondary">Filter sessions</button><a href="{{ url_for(endpoint, view=history_filters.view, **route_args) }}">Reset</a></div>
+    </form><p class="text-muted">Select both dates, up to one year at a time.</p>{% endif %}
+  </div>
+  <div class="card__body">
+    {% if sessions %}
+    <div class="table-container"><table class="data-table sessions-table" aria-label="Attendance session history">
+      <thead><tr><th>Date / class</th><th>Schedule</th><th>Session state</th><th>Attendance</th><th>Action</th></tr></thead>
+      <tbody>{% for item in sessions %}
+      <tr>
+        <td><strong>{{ item.scheduled_date }}</strong>{% if item.id %}<br><small>Session #{{ item.id }}</small>{% endif %}
+          {% if not class_info %}<br>{{ item.course_name }}<br><small>{{ item.class_code }}{% if session.role == 'Dean' %} · {{ item.teacher_name }}{% endif %}</small>{% endif %}
+          {% if item.is_archived %}<br><span class="badge badge--secondary">Archived class</span>{% endif %}</td>
+        <td>{{ schedule_time(item.scheduled_start_time) }}{% if item.scheduled_end_time %} – {{ schedule_time(item.scheduled_end_time) }}{% endif %}
+          {% if item.preview and item.status == 'Scheduled' %}<div class="session-secondary">Attendance opens<br><strong>{{ item.opening.strftime('%d %b, %I:%M %p') if item.opening else 'Opening time unavailable' }}</strong></div>
+          {% if item.opening_error %}<p>{{ item.opening_error }}</p>{% endif %}
+          {% if item.timing_error %}<p>{{ item.timing_error }}</p>{% endif %}
+          <div class="session-secondary">{{ 'Late after ' + item.late_at.strftime('%I:%M %p') if item.late_at else 'Late time unavailable' }}{% if item.ends %}<br>Attendance ends {{ item.ends.strftime('%d %b, %I:%M %p') }}{% endif %}</div>{% endif %}
+          {% if item.room_code %}<div class="session-secondary">Room {{ item.room_code }}</div>{% endif %}</td>
+        <td>{{ status(item) }}
+          {% if item.lifecycle_message %}<p class="session-secondary">{% if item.lifecycle_message == 'Attendance collection is open until the scheduled cutoff.' %}Attendance is open until its scheduled end time.{% else %}{{ item.lifecycle_message }}{% endif %}</p>{% endif %}
+          {% if item.close_reason and item.status == 'Missed' %}<p class="session-secondary">Explanation: {{ item.close_reason }}</p>{% endif %}
+          {% if item.explanation_history %}<details class="session-secondary"><summary>Explanation history</summary>{% for change in item.explanation_history %}<p><strong>{{ change.actor }}</strong> · {{ change.created_at|school_local_time }}<br>Previous: {{ change.previous or 'No explanation' }}<br>Saved: {{ change.new }}</p>{% endfor %}</details>{% endif %}</td>
+        <td>{% if item.status in ('Missed','Unrecorded','Cancelled') %}<span class="text-muted">No student results inferred.</span>
+          {% elif item.preview %}<span class="text-muted">Not started</span>
+          {% else %}{% if item.legacy_results %}<strong>{{ item.recorded_count }} saved student results</strong><p class="session-secondary">Historical completeness is not confirmed.</p>{% else %}<strong>Attendance recorded for {{ item.recorded_count }} of {{ item.total_count }} students</strong>{% endif %}
+          <p class="session-secondary">{{ item.pending_count }} {% if item.label in ('In progress', 'Starting') %}not yet marked{% else %}Pending{% if item.pending_count %} · needs review{% endif %}{% endif %}<br>{{ item.counts.get('Present',0) }} Present · {{ item.counts.get('Late',0) }} Late<br>{{ item.counts.get('Absent',0) }} Absent · {{ item.counts.get('Excused',0) }} Excused</p>
+          {% if item.history_consistent is defined and not item.history_consistent %}<p>Historical roster needs review. Completeness is not confirmed.</p>{% endif %}{% endif %}</td>
+        <td>{% if item.id and item.status not in ('Missed','Cancelled') %}{{ action(item) }}
+          {% elif item.status in ('Missed','Unrecorded') and (item.id or item.can_explain) and session.role == 'Teacher' and not item.is_archived %}
+            {% if class_info %}<button type="button" class="btn btn--secondary btn--sm js-open-missed-modal" data-attendance-session-id="{{ item.id or '' }}" data-schedule-period-id="{{ item.schedule_period_id or '' }}" data-scheduled-date="{{ item.scheduled_date }}" data-previous-reason="{{ item.close_reason }}" data-dialog-title="Explain missing attendance">{{ 'Edit explanation' if item.close_reason else 'Add explanation' }}</button>
+            {% else %}<a href="{{ url_for('classes.class_session_history', class_id=item.class_id, start_date=item.scheduled_date, end_date=item.scheduled_date) }}">View class sessions</a>{% endif %}
+          {% elif item.status == 'Scheduled' %}{{ action(item) }}
+          {% else %}<span class="text-muted">{% if item.status == 'Unrecorded' and not item.can_explain %}An explanation can be added from tomorrow.{% else %}Read-only{% endif %}</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {% elif not filter_error %}<p class="session-empty">{% if history_filters.view == 'review' %}No Pending attendance matches this selection. This does not confirm camera cleanup or resolve other session warnings.{% elif history_filters.view == 'upcoming' %}No upcoming meetings match these dates. Check the class schedule or choose another date range.{% elif history_filters.view == 'today' %}No class meetings are scheduled today. Open Upcoming to see the next scheduled dates.{% else %}No sessions match these filters. Choose another date range or reset the filters.{% endif %}</p>{% endif %}
+    {% if not filter_error %}<nav aria-label="Class history pages" class="session-pagination"><p>{{ history_total }} matching sessions · Page {{ history_page }} of {{ history_pages }}</p>{% if history_page > 1 %}<a href="{{ url_for(endpoint, page=history_page-1, **dict(route_args, **history_filters)) }}">Previous sessions</a>{% endif %}{% if history_page < history_pages %}<a href="{{ url_for(endpoint, page=history_page+1, **dict(route_args, **history_filters)) }}">Next sessions</a>{% endif %}</nav>{% endif %}
+  </div>
+</div>
+{% if class_info and session.get('role') == 'Teacher' and not class_info.is_archived %}
+<!-- Modal for Logging Missed Session Reason -->
+<div id="missedModal" role="dialog" aria-modal="true" aria-labelledby="missedModalTitle" aria-describedby="missedModalDescription" aria-hidden="true" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 1000; padding: var(--space-md);">
+    <div tabindex="-1" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); width: 100%; max-width: 480px;">
+        <h3 id="missedModalTitle" style="margin-bottom: var(--space-xs);">Explain missing attendance</h3>
+        <p id="missedModalDescription" class="text-muted" style="font-size: var(--font-size-sm); margin-bottom: var(--space-md);">Scheduled Date: <strong id="modalDateDisplay"></strong></p>
+        
+        <form method="POST" action="{{ url_for('classes.log_missed_session', class_id=class_info.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" id="modalScheduledDate" name="scheduled_date"/>
+            <input type="hidden" id="modalAttendanceSessionId" name="attendance_session_id"/>
+            <input type="hidden" id="modalSchedulePeriodId" name="schedule_period_id"/>
+            <input type="hidden" id="modalExpectedReason" name="expected_reason"/>
+            <p id="modalPreviousReason" class="text-muted"></p>
+            <p>This saves an explanation only. It does not mark students absent, add attendance or reschedule the class.</p>
+            
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label for="reasonSelect" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm);">Reason</label>
+                <select id="reasonSelect" name="reason" required style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                    <option value="">Select a reason</option>
+                    <option value="Class held; attendance not recorded">Class held; attendance not recorded</option>
+                    <option value="Teacher Medical Leave / Sick">Teacher Medical Leave / Sick</option>
+                    <option value="Official Institutional Holiday">Official Institutional Holiday</option>
+                    <option value="Department / College Event">Department / College Event</option>
+                    <option value="Weather / Natural Calamity">Weather / Natural Calamity</option>
+                    <option value="Make-up Class Rescheduled">Make-up Class Rescheduled</option>
+                    <option value="Other / Special Circumstance">Other / Special Circumstance</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom: var(--space-lg);">
+                <label for="notesInput" style="display: block; margin-bottom: var(--space-xs); font-size: var(--font-size-sm);">Additional details (optional)</label>
+                <textarea id="notesInput" name="notes" rows="3" maxlength="800" placeholder="Provide extra details for the Dean..." style="width: 100%; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);"></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: var(--space-sm);">
+                <button type="button" id="missedModalCancel" class="btn btn--secondary">Cancel</button>
+                <button type="submit" class="btn btn--primary">Save explanation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const missedModal = document.getElementById('missedModal');
+const missedModalDialog = missedModal.querySelector('[tabindex="-1"]');
+let missedModalReturnFocus = null;
+
+function missedModalFocusableElements() {
+    return Array.from(missedModal.querySelectorAll(
+        'button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), [href], [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => !element.hidden && element.offsetParent !== null);
+}
+
+function openMissedModal(attendanceSessionId, schedulePeriodId, dateStr, previousReason) {
+    document.getElementById('modalExpectedReason').value = previousReason || '';
+    document.getElementById('modalPreviousReason').textContent = previousReason ? 'Saved explanation: ' + previousReason : 'No explanation saved yet.';
+    document.getElementById('reasonSelect').value = '';
+    document.getElementById('notesInput').value = '';
+    document.getElementById('modalScheduledDate').value = dateStr;
+    document.getElementById('modalAttendanceSessionId').value = attendanceSessionId;
+    document.getElementById('modalSchedulePeriodId').value = schedulePeriodId;
+    document.getElementById('modalDateDisplay').textContent = dateStr;
+    missedModal.style.display = 'flex';
+    missedModal.setAttribute('aria-hidden', 'false');
+    document.getElementById('reasonSelect').focus();
+}
+
+function closeMissedModal() {
+    missedModal.style.display = 'none';
+    missedModal.setAttribute('aria-hidden', 'true');
+    if (missedModalReturnFocus && document.contains(missedModalReturnFocus)) {
+        missedModalReturnFocus.focus();
+    }
+    missedModalReturnFocus = null;
+}
+
+document.querySelectorAll('.js-open-missed-modal').forEach((button) => {
+    button.addEventListener('click', () => {
+        missedModalReturnFocus = button;
+        document.getElementById('missedModalTitle').textContent = button.dataset.dialogTitle;
+        openMissedModal(
+            button.dataset.attendanceSessionId,
+            button.dataset.schedulePeriodId,
+            button.dataset.scheduledDate,
+            button.dataset.previousReason
+        );
+    });
+});
+
+document.getElementById('missedModalCancel').addEventListener('click', closeMissedModal);
+missedModal.addEventListener('click', (event) => {
+    if (event.target === missedModal) closeMissedModal();
+});
+missedModal.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMissedModal();
+        return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = missedModalFocusableElements();
+    if (!focusable.length) {
+        event.preventDefault();
+        missedModalDialog.focus();
+        return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

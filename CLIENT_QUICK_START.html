@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CSD Attendance: start on your network</title>
+<style>
+:root{font-family:Segoe UI,Arial,sans-serif;color:#17233b;background:#f2f5fa;line-height:1.6}
+*{box-sizing:border-box}body{margin:0}main{max-width:1040px;margin:auto;padding:42px 24px}
+header{margin-bottom:28px}.eyebrow{color:#354ba0;font-weight:700;letter-spacing:.09em;font-size:13px}
+h1{font-size:36px;line-height:1.15;letter-spacing:-.025em;margin:10px 0 16px}h2{font-size:20px;line-height:1.3;margin:0 0 14px}
+h3{font-size:16px;margin:20px 0 6px}p{margin:8px 0 14px}.intro{max-width:760px;font-size:18px;color:#46536b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{background:white;border:1px solid #d6deed;border-radius:12px;padding:24px;break-inside:avoid}
+.wide{grid-column:1/-1}.tag{display:inline-block;color:#334c9a;background:#edf1fc;padding:3px 10px;border-radius:5px;font-weight:700;font-size:12px;margin-bottom:12px}
+ol,ul{padding-left:22px;margin:10px 0}li{padding-left:3px;margin:9px 0}code{font:600 14px Consolas,monospace;overflow-wrap:anywhere;color:#172d77}
+.note{background:#edf2fc;border-left:3px solid #425bad;padding:12px 16px;margin:18px 0 0}.small,footer{font-size:13px;color:#556279}
+a{color:#2945a3;text-underline-offset:3px}a:focus-visible{outline:3px solid #dfac31;outline-offset:3px}
+dl{margin:0}dt{font-weight:700;margin-top:14px}dd{margin:2px 0 0}.route{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#111e50;color:white;border-radius:10px;padding:18px 22px;margin:22px 0;font-weight:600}.route span{flex:1;text-align:center}.route b{font-size:24px}
+footer{margin-top:24px}@media(max-width:680px){main{padding:26px 16px}.grid{grid-template-columns:1fr}h1{font-size:29px}.card{padding:20px}.route{font-size:13px;gap:6px;padding:14px 10px}}
+@media print{body{background:white}main{max-width:none;padding:0}h1{font-size:28px}.card{border-radius:0;padding:16px}.grid{gap:12px}.route{color:#17233b;background:white;border:1px solid #d6deed}a{color:inherit}footer{margin-top:12px}}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">CSD FARS · CLIENT QUICK START</div>
+<h1>One server. Your shared network.</h1>
+<p class="intro">Install CSD Attendance on the laptop that will run the system. Other computers connect to it in their browsers and share the same records.</p>
+<div class="route" aria-label="Connect the server laptop, CCTV and joining computers to the same router, through a switch or Wi-Fi."><span>Server laptop<br>+ CCTV</span><b aria-hidden="true">↔</b><span>Your router<br>and switch / Wi-Fi</span><b aria-hidden="true">↔</b><span>Joining<br>computers</span></div>
+<p class="small">Server requirements: Windows on an Intel/AMD 64-bit computer, at least 6 GB free space, and internet access for the first setup. You do not need to install Python or database software. Camera performance is checked on this laptop after setup.</p></header>
+<div class="grid">
+<section class="card"><div class="tag">1 · SERVER LAPTOP</div><h2>Install once</h2>
+<ol><li>Connect this laptop, the CCTV and the other computers to the <strong>same trusted router</strong>. A switch can connect their Ethernet cables to that router. An isolated switch-only LAN also works when each device already has a unique private IPv4 address in the same subnet. It needs no default gateway for local attendance; ask your network owner to configure the addresses. Setup does not assign addresses or change routes.</li>
+<li>Extract the complete supplied installer ZIP to a permanent local folder, outside OneDrive. Keep all its files together.</li>
+<li>In that folder, double-click <code>START_HERE.cmd</code> and choose <strong>Share with computers on this network</strong>. This opens guided LAN setup on first use and starts the server on later days.</li>
+<li>If more than one network is connected, choose the connection used by the other computers. Setup shows its name and address.</li>
+<li>Wait for the first setup, then create your <strong>Dean / administrator account</strong>. Use <strong>Show passwords</strong> if needed; you can correct a mismatch in the same window.</li></ol>
+<p class="note">Use this same folder and Windows account on later days. Each separate server installation has its own records.</p></section>
+<section class="card"><div class="tag">2 · SERVER LAPTOP</div><h2>Complete the network steps</h2>
+<ol><li>If Windows calls your trusted router <strong>Public</strong>, choose <strong>Make this connection Private</strong> and approve the Windows prompt.</li>
+<li>For daily use, ask the router owner to <strong>reserve the server address</strong> so the connection kit stays valid. <strong>Use the current address</strong> continues without a router reservation; that address may change later and require LAN setup to be refreshed.</li>
+<li>Follow the displayed certificate and Windows Firewall approvals. Setup limits sharing to the selected private network.</li>
+<li>When the sign-in page opens, sign in as the administrator. Keep the server window open and the laptop <strong>powered on, plugged in and awake</strong>.</li></ol>
+<p class="note">If a question was closed, reopen <code>START_HERE.cmd</code> in the same folder and choose shared access to retry. Completed account, certificate trust and verified firewall steps are reused.</p></section>
+<section class="card"><div class="tag">3 · JOINING WINDOWS COMPUTERS</div><h2>Connect in the browser</h2>
+<ol><li>On the server, open <strong>Setup Center</strong> and download the <strong>browser connection kit</strong>. You can also copy its generated <code>LAN_CLIENT_KIT</code> folder.</li>
+<li>Transfer and extract that complete kit on each joining computer. Double-click <code>CONNECT_TO_CSD.cmd</code>.</li>
+<li>Compare the displayed certificate fingerprint with the server owner's copy. If they match, choose <strong>The fingerprints match - connect</strong>.</li>
+<li>Sign in with an account created on the server. The administrator can create staff accounts in <strong>User Management</strong>.</li></ol>
+<p class="note">Use the normal Windows browser opened by the kit and bookmark its sign-in page. Certificate approval is once per Windows account for this server certificate; it is not needed at every sign-in. Embedded app browsers may use a different trust store. Joining computers need only the connection kit. Their browser uses the records on the server; installing another server would create separate records.</p></section>
+<section class="card"><div class="tag">4 · FIRST-USE CHECKS</div><h2>Prepare for attendance</h2>
+<ol><li>As administrator, follow <strong>Setup Center</strong> to configure programs and locations. Under <strong>Cameras</strong>, choose <strong>Add camera</strong>, select its room, enter its connection and <strong>Save changes</strong>. Saving does not test the camera; use <strong>Test saved camera</strong> separately. Create staff accounts, a class and its schedule.</li>
+<li>For the first-use check, register a consenting participant, complete the required approval, and add them to the class roster.</li>
+<li>Open <strong>Recognition Tuner</strong> on the server. Check the picture and recognition under the actual lighting and distance. Keep normal matching selected for the first check.</li>
+<li>Confirm an enrolled participant is recognized correctly and an unenrolled volunteer stays unknown. Then test a scheduled attendance session, review its record and open <strong>Reports</strong>.</li>
+<li>Use <strong>Network</strong> and <strong>System Diagnostics</strong> to check connections and resource use while the joining computers operate the system.</li></ol>
+<p class="small">A fresh installation contains no students or classes. Camera distance, group size and performance depend on the actual camera, lighting and laptop; check these before using automatic recognition for real attendance.</p></section>
+<section class="card"><h2>Daily use and data</h2><dl>
+<dt>Start</dt><dd>Double-click <code>START_HERE.cmd</code> on the server and choose its usual launch mode. After their first connection, joining computers can open a bookmark of the server sign-in page in the same browser.</dd>
+<dt>Finish</dt><dd>Finish attendance in the app before closing the foreground server window. Optional automatic startup has separate Start / Stop controls.</dd>
+<dt>Back up</dt><dd>Use <strong>System Operations</strong> and agree with the owner where protected backups and the matching recovery keys will be kept off the server. The current backup action is manual.</dd>
+<dt>Manage cameras</dt><dd>Use <strong>Camera inventory</strong> to search and edit saved devices, and <strong>Room coverage</strong> to find rooms needing setup. Ready permits use but does not prove a working connection. Use Inactive or Maintenance to take a camera out of attendance use, or Retire to preserve its history. <strong>Review removal</strong> explains whether an unused camera can be deleted.</dd>
+<dt>Update later</dt><dd>Keep this installation. Use <strong>Update or recover</strong> only with a supported update package supplied by the system owner. Never extract a fresh installer over your records. The included publisher public key verifies update packages; it is not a Windows Authenticode signature or proof of release approval or target-computer qualification.</dd>
+</dl></section>
+<section class="card"><h2>If something stops setup</h2><dl>
+<dt>Another computer cannot connect</dt><dd>Check the server is running and awake, both devices use the same trusted local network (router or configured switch-only subnet), and the kit belongs to this server. Choose <strong>Check connection again</strong>.</dd>
+<dt>The address changed</dt><dd>Reconnect to the original network and retry. If the router or server address really changed, keep the installation intact and ask the owner to reconfigure its connection.</dd>
+<dt>A certificate warning appears</dt><dd>Use the complete kit and compare fingerprints again. Do not bypass a warning or mix kits from different servers.</dd>
+<dt>An error remains</dt><dd>Keep the folder intact. Send the owner the complete error message with passwords and private data hidden. You can reopen the same installation in <strong>Use on this computer</strong> mode while the connection is checked.</dd>
+</dl></section>
+</div><footer>More detail: <a href="PORTABLE_QUICK_START.md">installation and updates</a> · ask the system owner for the separate LAN acceptance checklist. Keep this guide with the supplied installer. Successful installation does not verify camera recognition or access from another laptop; complete the relevant checks on the school's equipment before relying on those functions.</footer>
+</main></body></html>

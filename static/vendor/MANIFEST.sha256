@@ -1,0 +1,8 @@
+# Pinned application-owned frontend assets
+# Source packages: @vladmandic/face-api@1.7.15 and chart.js@4.5.1
+48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a  chart.js/4.5.1/chart.umd.min.js
+41a84aa2caba645f966a18d9c2056b73e6d3a81d80bc0046bc0011a2634d4cce  chart.js/4.5.1/LICENSE.md
+0160f7af3a8c78cece45c7ecc765383bad74becfd438bb787cdd627b2d6f2cf6  face-api/1.7.15/face-api.js
+9a3442b79acaf4fbc7c2e07b7e2d8f84af9bb3871bf08a69d80304ab00640e9a  face-api/1.7.15/LICENSE
+5d1af4849ac48d5b985f4a9b16010c512353ddd6fcc63d50fd0bc9e9e64296e5  face-api/1.7.15/model/tiny_face_detector_model-weights_manifest.json
+b7503ce7df31039b1c43316a9b865cab6a70dd748cc602d3fa28b551503c3871  face-api/1.7.15/model/tiny_face_detector_model.bin

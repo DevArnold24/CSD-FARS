@@ -1,0 +1,10 @@
+{% if pending_schedule %}
+{% from 'classes/_schedule_time.html' import schedule_time %}
+<p class="flash flash--info" data-pending-schedule>
+    <strong>Saved schedule change</strong><br>
+    Effective from <time datetime="{{ pending_schedule.effective_from }}">{{ pending_schedule.effective_from }}</time>:
+    {{ pending_schedule.days_of_week|replace(',', ', ') }} &middot;
+    {{ schedule_time(pending_schedule.start_time) }} to {{ schedule_time(pending_schedule.end_time) }} (school time).
+    Until then, the current schedule applies. Saved attendance sessions keep their original times.
+</p>
+{% endif %}

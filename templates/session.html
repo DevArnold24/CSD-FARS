@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance - {{ class_info.course_name }} - CSD FARS{% endblock %}
+
+{% block content %}
+<style>
+    #attendance-display-controls [hidden], #session-recovery-banner[hidden],
+    #session-expired-banner[hidden], #attendance-recheck[hidden],
+    #session-capture-notice[hidden], #session-retry-preview[hidden], #session-attendance-log[hidden], #session-start-readiness[hidden], #session-start-ack-label[hidden], #session-start-fallback[hidden], #session-start-reason[hidden], #session-roster-preview[hidden], #session-completion[hidden], #session-retry-closure[hidden], #session-clock-review[hidden] { display: none !important; }
+    #btn-start-session:disabled, #btn-end-session:disabled,
+    #attendance-display-controls .btn:disabled, #btn-submit-override:disabled,
+    #btn-maximize-feed:disabled, .session-checklist-card button:disabled {
+        opacity: 0.5; cursor: not-allowed; filter: grayscale(0.4); box-shadow: none;
+    }
+</style>
+<div class="attendance-sticky-header">
+<div class="page-header attendance-page-header">
+    <div class="page-header__content">
+        <h1 class="page-header__title">{{ class_info.course_name }} - {{ class_info.section }}</h1>
+        <p class="page-header__subtitle">Attendance · {{ session_date }}{% if active_session %} · Session #{{ active_session.id }}{% endif %}</p>
+        <a href="{{ url_for('classes.class_session_history', class_id=class_info.id, view='today') }}">Choose another session</a>
+    </div>
+    <div class="page-header__actions" style="display: flex; gap: var(--space-sm); align-items: center;">
+        <button id="btn-start-session" class="btn btn--primary" {% if class_info.is_active %}style="display: none;"{% endif %} {% if not class_info.is_active and not session_availability.allowed and not resume_available %}disabled{% endif %}>
+            {% if resume_available %}Resume Attendance{% else %}Start Session{% endif %}
+        </button>
+        <button id="btn-end-session" class="btn btn--danger" {% if not class_info.is_active %}style="display: none;"{% endif %}>
+            End Session
+        </button>
+    </div>
+</div>
+
+<aside id="session-end-notice" class="session-end-notice" role="status" aria-live="polite" aria-atomic="true" hidden>
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    <div><strong id="session-end-notice-title"></strong><p id="session-end-notice-detail"></p></div>
+</aside>
+</div>
+
+{% if not active_session or active_session.policy_version == 2 %}
+<section id="session-start-readiness" class="card" aria-label="Attendance readiness" style="padding:var(--space-md);margin-bottom:var(--space-lg);" {% if class_info.is_active %}hidden{% endif %}>
+    <strong>Review attendance before starting</strong>
+    <p id="session-start-summary" role="status" aria-live="polite">Checking attendance details…</p>
+    <div style="display:flex;gap:var(--space-md);align-items:center;flex-wrap:wrap;">
+        <label for="session-start-mode">Attendance mode</label>
+        <select id="session-start-mode" class="form-control" style="max-width:260px;">
+            <option value="camera" {% if has_camera %}selected{% endif %}>Camera attendance</option>
+            <option value="manual" {% if not has_camera %}selected{% endif %}>Manual attendance</option>
+        </select>
+        <button id="session-start-refresh" type="button" class="btn btn--secondary">Check again</button>
+    </div>
+    <p id="session-start-timing" class="text-muted"></p>
+    <p id="session-start-camera" class="text-muted"></p>
+    <p id="session-start-explanation" class="session-eligibility" role="status" aria-live="polite"></p>
+    <label id="session-start-ack-label" hidden><input id="session-start-ack" type="checkbox"> I understand that some students need individual attendance decisions.</label>
+    <button id="session-start-fallback" type="button" class="btn btn--secondary" hidden>Continue manually</button>
+    <textarea id="session-start-reason" class="form-control" rows="2" maxlength="500" aria-label="Reason for manual continuation" placeholder="Reason for continuing manually (required)" hidden></textarea>
+</section>
+{% endif %}
+
+<section id="session-roster-preview" class="card" style="padding:var(--space-md);margin-bottom:var(--space-lg);" {% if active_session %}hidden{% endif %}>
+    <strong>Attendance not started</strong>
+    <p class="text-muted">Students included in attendance. Attendance has not started.</p>
+    <ul id="session-roster-preview-list" style="max-height:220px;overflow:auto;"></ul>
+</section>
+
+<div id="session-expired-banner" class="card" role="alert" aria-live="assertive" hidden style="margin-bottom: var(--space-lg); border: 1px solid var(--color-error);">
+    <div class="card__body">
+        <strong id="session-auth-title">Your login session expired.</strong>
+        <p id="session-auth-message" class="text-muted" style="margin: var(--space-xs) 0 var(--space-sm);">Updates have stopped and private attendance information has been cleared from this screen. Sign in to check the session.</p>
+        <a id="session-expired-login" class="btn btn--primary btn--sm" href="{{ url_for('auth.login') }}">Log in to resume</a>
+    </div>
+</div>
+
+<div id="session-recovery-banner" class="card" role="status" aria-live="polite" {% if not session_runtime.session_message %}hidden{% endif %} style="padding: var(--space-md); margin-bottom: var(--space-lg);">
+    {{ session_runtime.session_message or '' }}
+</div>
+
+<section class="attendance-connection" aria-label="Attendance connection">
+    <strong id="attendance-connection-status" role="status" aria-live="polite">Connecting</strong>
+    <p id="attendance-sync-message" class="text-muted">Connecting to check attendance. The current session status is not yet known.</p>
+    <button id="attendance-recheck" type="button" class="btn btn--secondary" hidden>Reload to verify</button>
+</section>
+
+<section id="session-completion" class="card" aria-label="Session result" style="padding: var(--space-md); margin-bottom: var(--space-lg);" hidden>
+    <strong id="session-completion-title" role="status" aria-live="polite"></strong>
+    <p id="session-completion-counts"></p><p id="session-completion-detail"></p>
+    <details class="workflow-details"><summary>Session details</summary><p id="session-completion-context" class="text-muted"></p></details>
+    <a id="session-review-link" class="btn btn--primary" href="#">Review saved attendance</a>
+    <div id="session-clock-review" hidden style="margin-block: var(--space-md);">
+        <label><input id="session-clock-reviewed" type="checkbox"> The server operator has checked and corrected the server clock.</label>
+        <label for="session-clock-reason" style="display:block; margin-top:var(--space-sm);">Technical review note (required)</label>
+        <textarea id="session-clock-reason" maxlength="500" rows="2" style="width:100%;" placeholder="Record the operator's clock check and correction. Do not include private connection details."></textarea>
+        <p class="text-muted">Retry records your confirmation. It does not verify the clock independently or restart attendance. Resume still requires confirmed cleanup and time remaining before the original cutoff.</p>
+    </div>
+    <button id="session-reopen" type="button" class="btn btn--secondary" hidden>Review camera reopening</button>
+    <p id="session-reopen-message" class="text-muted" hidden></p>
+    <button id="session-retry-closure" type="button" class="btn btn--secondary" hidden>Retry recovery</button>
+</section>
+
+
+
+<div class="attendance-availability">
+    <div class="attendance-availability__body">
+        <div>
+            <strong>Attendance status</strong>
+            <p id="session-availability-message" class="text-muted" style="margin: var(--space-xs) 0 0;">
+                {% if session_availability.message == 'This occurrence uses a fixed attendance cutoff. End is terminal; check the current collection, closure and review status.' %}This session keeps its original end time. After you end attendance, you cannot resume it. Check the current status above.{% else %}{{ session_availability.message }}{% endif %}
+            </p>
+            {% if session_availability.report_session_id %}
+            <a href="{{ url_for('classes.class_session_report', class_id=class_info.id, attendance_session_id=session_availability.report_session_id) }}">View Saved Attendance Report</a>
+            {% endif %}
+        </div>
+        <span id="session-availability-badge" class="badge {% if session_availability.allowed or class_info.is_active %}badge--success{% else %}badge--warning{% endif %}">
+            {% if class_info.is_active %}Session running{% elif resume_available %}Resume available{% elif session_availability.allowed %}Attendance opening reached{% else %}Not available yet{% endif %}
+        </span>
+    </div>
+</div>
+
+<details class="attendance-display-options"><summary>Student display</summary>
+<section id="attendance-display-controls" class="card" style="margin-bottom: var(--space-lg);">
+    <div class="card__body" style="display:flex; justify-content:space-between; gap:var(--space-md); align-items:center; flex-wrap:wrap;">
+        <div>
+            <div style="display:flex; align-items:center; gap:var(--space-sm); flex-wrap:wrap;">
+                <strong>Attendance Display</strong>
+                <span id="attendance-display-status" class="badge {% if display_enabled %}badge--success{% else %}badge--secondary{% endif %}">
+                    {% if display_enabled %}Enabled{% else %}Inactive{% endif %}
+                </span>
+            </div>
+            <p id="attendance-display-message" class="text-muted" role="status" aria-live="polite" style="margin:var(--space-xs) 0 0; max-width:720px;">
+                {% if display_enabled and not display_url %}
+                    A display link is active, but it is not available in this browser session. Create a replacement link to open or copy the display. The old link will stop working.
+                {% else %}
+                    Share a private display for this attendance session. Results remain after attendance ends, until you clear or replace the display. Video is shown only during live attendance.
+                {% endif %}
+            </p>
+            <div id="attendance-display-copy-fallback" hidden style="margin-top:var(--space-sm); max-width:720px;">
+                <label for="attendance-display-copy-link">Private Attendance Display link</label>
+                <input id="attendance-display-copy-link" class="form-input" type="text" readonly autocomplete="off" spellcheck="false" aria-describedby="attendance-display-copy-help" style="width:100%;">
+                <p id="attendance-display-copy-help" class="text-muted" style="margin:var(--space-xs) 0 0;">Press Ctrl+C (Command+C on Mac), or use your device's Copy action. Share this private link only with the intended room display.</p>
+            </div>
+        </div>
+        <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap;">
+            <button type="button" id="btn-enable-display" class="btn btn--secondary" {% if not class_info.is_active %}disabled{% endif %}>
+                {% if display_enabled %}Create Replacement Link{% else %}Enable Display{% endif %}
+            </button>
+            <a id="link-open-display" class="btn btn--primary{% if not display_url %} is-hidden{% endif %}" href="{{ display_url or '#' }}" target="_blank" rel="noopener noreferrer" {% if not display_url %}hidden{% endif %}>Open Display</a>
+            <button type="button" id="btn-copy-display" class="btn btn--secondary" {% if not display_url %}hidden{% endif %}>Copy Link</button>
+            <button type="button" id="btn-deactivate-display" class="btn btn--danger" {% if not display_enabled %}hidden{% endif %}>Clear display</button>
+        </div>
+    </div>
+</section>
+</details>
+
+<div class="session-grid responsive-grid">
+    <!-- Video Feed Pane (Conditional) -->
+    {% if has_camera %}
+    <div id="session-video-panel" class="card session-video-card">
+        <div class="card__header session-video-header">
+            <div>
+                <h2 class="card__title">Live Camera Feed</h2>
+                <div class="session-video-status">
+                    <span id="session-status-badge" class="badge {% if class_info.is_active %}badge--success{% else %}badge--secondary{% endif %}">
+                        {% if class_info.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                    <span id="countdown-timer" class="session-countdown"></span>
+                </div>
+            </div>
+            <button type="button" id="btn-maximize-feed" class="btn btn--secondary btn--sm" aria-pressed="false">
+                Maximize Feed
+            </button>
+        </div>
+        <div style="padding: 0 24px 12px;">
+            <label for="session-feed-view">View</label>
+            <select id="session-feed-view" class="form-control" aria-describedby="session-feed-view-help" style="max-width: 280px; margin-top: 4px;">
+                <option value="live" selected>Smooth live view</option>
+                <option value="recognition">Recognition boxes</option>
+            </select>
+            <p id="session-feed-view-help" class="text-muted" style="font-size: 0.82rem; margin: 6px 0 0;">Once camera attendance starts, recognition works in both views. Recognition boxes may update more slowly than the live view.</p>
+        </div>
+        <p id="session-capture-notice" role="status" class="flash flash--warning" hidden></p>
+        <button id="session-retry-preview" type="button" class="btn btn--secondary" hidden>Retry preview</button>
+        <div id="session-video-body" class="card__body session-video-body">
+            <img id="video-feed"
+                 src="{% if class_info.is_active %}{{ url_for('video_feed', class_id=class_info.id, view='live') }}{% else %}data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs={% endif %}"
+                 alt="Live Camera Feed">
+
+            <div id="video-placeholder" class="session-video-placeholder" {% if class_info.is_active %}style="display: none;"{% endif %}>
+                The camera view is off. Check the attendance details, then select Start camera attendance.
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Manual Mode UI -->
+    <div class="manual-attendance-intro">
+        <h3 style="margin-bottom: 8px;">Manual attendance</h3>
+        <p id="manual-attendance-guidance" class="text-muted" style="margin-bottom: 8px;">Mark each student’s attendance below after starting. After attendance ends, open the saved report to make corrections and enter a reason. Selecting manual attendance does not change the assigned camera.</p>
+        <div class="session-video-status" style="justify-content: center;">
+            <span id="session-status-badge" class="badge {% if class_info.is_active %}badge--success{% else %}badge--secondary{% endif %}">
+                {% if class_info.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+            <span id="countdown-timer" class="session-countdown"></span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Attendance Checklist Pane -->
+    <div id="session-attendance-log" {% if not active_session %}hidden{% endif %} class="card session-checklist-card">
+        <div class="card__header">
+            <h2 class="card__title">Student attendance</h2>
+            <span id="attendance-log-sync-status" class="text-muted">Waiting for attendance updates</span>
+        </div>
+
+        <div class="card__body attendance-roster">
+            <p id="attendance-progress" class="attendance-progress">Checking recorded attendance…</p>
+            <div class="attendance-roster-filters">
+                <div><label for="attendance-search">Find a student</label><input id="attendance-search" type="search" class="form-control" placeholder="Name or student ID" autocomplete="off"></div>
+                <div><label for="attendance-filter">Show</label><select id="attendance-filter" class="form-control">
+                    <option value="all">All students</option>
+                    <option id="attendance-filter-pending" value="pending">Not yet marked</option>
+                    <option id="attendance-filter-present" value="present">Present / Late</option>
+                    <option id="attendance-filter-absent" value="absent">Absent</option>
+                    <option id="attendance-filter-excused" value="excused">Excused</option>
+                </select></div>
+            </div>
+            <p id="attendance-filter-result" class="text-muted" role="status" aria-live="polite"></p>
+            {% for group, label in [('pending', 'Not yet marked'), ('present', 'Present / Late'), ('absent', 'Absent'), ('excused', 'Excused')] %}
+            <section id="attendance-group-{{ group }}" class="attendance-section" aria-labelledby="attendance-heading-{{ group }}">
+                <h3 id="attendance-heading-{{ group }}">{{ label }}</h3>
+                <ul id="{{ group }}-list" class="attendance-students"></ul>
+            </section>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+
+<details class="workflow-details"><summary>Attendance opening details</summary><p id="session-accepted-opening" class="text-muted" hidden></p></details>
+
+<!-- Manual Override Modal -->
+<div id="override-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="override-modal-title" aria-hidden="true" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" tabindex="-1" style="width: min(400px, calc(100% - 2rem)); background: var(--color-bg-card); border-radius: var(--radius-lg);">
+        <div class="card__header" style="border-bottom: 1px solid var(--color-border); padding-bottom: 12px; margin-bottom: 16px;">
+            <h3 id="override-modal-title" style="margin: 0;">Update attendance: <span id="override-student-name"></span></h3>
+        </div>
+        <div class="card__body">
+            <p id="override-student-context"></p>
+            <p class="text-muted">{{ class_info.course_name }} · {{ class_info.class_code }} · {{ session_date }}</p>
+            <form id="override-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" id="override-student-id">
+
+                <div style="margin-bottom: 16px;">
+                    <label for="override-status" style="display: block; margin-bottom: 8px; font-weight: 500;">New Status</label>
+                    <select id="override-status" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg-input); color: var(--color-text-primary);">
+                        <option value="Present">Present</option>
+                        <option value="Late">Late</option>
+                        <option value="Absent">Absent</option>
+                        <option value="Excused">Excused</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <label for="override-reason" style="display: block; margin-bottom: 8px; font-weight: 500;">Reason (Required)</label>
+                    <textarea id="override-reason" required rows="3" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg-input); color: var(--color-text-primary);" placeholder="Explain why you are recording this attendance status."></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                    <button type="button" id="btn-cancel-override" class="btn btn--secondary" style="background: transparent; border: 1px solid var(--color-border);">Cancel</button>
+                    <button type="submit" id="btn-submit-override" class="btn btn--primary">Save attendance</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.SESSION_CONFIG = {
+        classId: {{ class_info.id }},
+        sessionDate: {{ session_date|tojson }},
+        startProtocol: {{ 'true' if not active_session or active_session.policy_version == 2 else 'false' }},
+        hasCamera: {{ 'true' if has_camera else 'false' }},
+        videoFeedUrl: "{{ url_for('video_feed', class_id=class_info.id) }}",
+        startTimeStr: "{{ active_session.scheduled_start_time if active_session else class_info.start_time }}",
+        lateThreshold: parseInt("{{ class_info.late_threshold_minutes }}", 10),
+        durationMins: parseInt("{{ duration_mins }}", 10),
+        endTimeStr: "{{ active_session.scheduled_end_time if active_session else class_info.end_time }}",
+        resumeDeadlineStr: {{ resume_deadline|tojson }},
+        scheduledStartStr: {{ scheduled_start|tojson }},
+        resumeGraceMins: parseInt("{{ resume_grace_mins }}", 10),
+        isSessionActive: {{ 'true' if class_info.is_active else 'false' }},
+        canStartSession: {{ 'true' if (session_availability.allowed or resume_available) and session_runtime.session_state not in ['stopping', 'unverified'] else 'false' }},
+        sessionState: {{ session_runtime.session_state|tojson }},
+        sessionMessage: {{ session_runtime.session_message|tojson }},
+        occurrenceOpen: {{ 'true' if session_runtime.occurrence_open else 'false' }},
+        lifecycle: {{ session_runtime.get('lifecycle')|tojson }},
+        resumeAvailable: {{ 'true' if resume_available else 'false' }},
+        availabilityMessage: {{ session_availability.message|tojson }},
+        activeSessionId: {{ active_session.id if active_session else 'null' }},
+        actualStartedAtStr: "{{ active_session.actual_started_at if active_session and active_session.actual_started_at else '' }}",
+        displayEnabled: {{ 'true' if display_enabled else 'false' }},
+        displayUrl: {{ display_url|tojson }}
+    };
+</script>
+<script src="{{ url_for('static', filename='js/session-auth.js') }}"></script>
+<script src="{{ url_for('static', filename='js/mjpeg-watchdog.js') }}"></script>
+<script src="{{ url_for('static', filename='js/attendance-poller.js') }}"></script>
+<script src="{{ url_for('static', filename='js/session.js') }}"></script>
+<script src="{{ url_for('static', filename='js/session-start.js') }}"></script>
+{% endblock %}

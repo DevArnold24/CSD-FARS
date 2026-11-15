@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Registration Review History - CSD FARS{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/registration-requests.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header request-page-header">
+    <div>
+        <h1 class="page-header__title">Registration Review History</h1>
+        <p class="text-muted">Find completed decisions, reviewer feedback, and the Teacher who submitted each request.</p>
+    </div>
+    <a class="btn btn--secondary" href="{{ url_for('students.student_approvals') }}">Back to Pending Requests</a>
+</div>
+
+<form class="request-filters card" method="get" action="{{ url_for('students.student_approval_history') }}" aria-label="Filter review history">
+    <div class="form-group">
+        <label class="form-label" for="review-history-status">Decision</label>
+        <select class="form-input" id="review-history-status" name="status" {% if validation_error %}aria-invalid="true" aria-describedby="review-history-error"{% endif %}>
+            <option value="">All decisions</option>
+            {% for status in statuses %}<option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-group request-search">
+        <label class="form-label" for="review-history-search">Student name or ID</label>
+        <input class="form-input" type="search" id="review-history-search" name="q" value="{{ query }}" maxlength="120" autocomplete="off">
+    </div>
+    <div class="request-actions">
+        <button class="btn btn--primary" type="submit">Apply Filters</button>
+        <a class="btn btn--secondary" href="{{ url_for('students.student_approval_history') }}">Clear Filters</a>
+    </div>
+</form>
+{% if validation_error %}<p id="review-history-error" class="flash flash--error" role="alert">{{ validation_error }}</p>{% endif %}
+
+<div class="request-results-heading">
+    <p id="review-result-count" role="status">{{ total }} matching decision{% if total != 1 %}s{% endif %}{% if total %} · Page {{ page }} of {{ page_count }}{% endif %}</p>
+    <a class="btn btn--secondary btn--sm" href="{{ url_for('students.student_approval_history', status=selected_status, q=query, page=page) }}">Refresh History</a>
+</div>
+<p class="text-muted">Approval registers a student; their Teacher adds them to a class roster. Times below use the school's local time.</p>
+
+{% if decisions %}
+<ol class="request-list" aria-label="Completed registration decisions" aria-describedby="review-result-count">
+    {% for item in decisions %}
+    <li class="card request-card" id="decision-{{ item.id }}">
+        <article aria-labelledby="decision-title-{{ item.id }}">
+            <div class="request-card-heading">
+                <h2 id="decision-title-{{ item.id }}">{{ item.name }}</h2>
+                <span class="badge {% if item.status == 'Approved' %}badge--success{% else %}badge--error{% endif %}">{{ item.status }}</span>
+            </div>
+            <dl class="request-details">
+                <div><dt>Student ID</dt><dd>{{ item.student_id }}</dd></div>
+                <div><dt>Academic program</dt><dd>{{ item.program_name or 'Program unavailable' }}</dd></div>
+                <div><dt>Year level</dt><dd>{{ item.year_level }}</dd></div>
+                <div><dt>Request</dt><dd>#{{ item.id }}</dd></div>
+                <div><dt>Submitted by</dt><dd>{{ item.submitted_by or 'Account unavailable' }}</dd></div>
+                <div><dt>Reviewed by</dt><dd>{{ item.reviewed_by or 'System / reviewer unavailable' }}</dd></div>
+                <div><dt>Submitted (school-local time)</dt><dd>{{ item.submitted_at|school_local_time }}</dd></div>
+                <div><dt>Reviewed (school-local time)</dt><dd>{{ item.reviewed_at|school_local_time }}</dd></div>
+            </dl>
+            <h3 class="request-note-heading">Reviewer feedback</h3>
+            <p class="request-review-note">{{ item.review_note or 'No review note was provided.' }}</p>
+        </article>
+    </li>
+    {% endfor %}
+</ol>
+{% elif not validation_error %}
+<div class="card request-empty">
+    {% if selected_status or query %}
+    <h2>No decisions match these filters</h2>
+    <p>Try another name or ID, or clear the filters to see all completed decisions.</p>
+    {% else %}
+    <h2>No completed decisions yet</h2>
+    <p>Approved and rejected requests will appear here after review.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if page_count > 1 %}
+<nav class="request-pagination" aria-label="Review history pages">
+    {% if page > 1 %}<a class="btn btn--secondary" rel="prev" href="{{ url_for('students.student_approval_history', status=selected_status, q=query, page=page - 1) }}">Previous page</a>{% endif %}
+    <span>Page {{ page }} of {{ page_count }}</span>
+    {% if page < page_count %}<a class="btn btn--secondary" rel="next" href="{{ url_for('students.student_approval_history', status=selected_status, q=query, page=page + 1) }}">Next page</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

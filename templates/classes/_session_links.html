@@ -1,0 +1,6 @@
+<nav class="session-tabs" aria-label="Find class sessions">
+    <a href="{{ url_for('classes.session_agenda') }}" class="btn btn--secondary">Today's sessions</a>
+    <a href="{{ url_for('classes.session_agenda', view='upcoming') }}" class="btn btn--secondary">Upcoming sessions</a>
+    <a href="{{ url_for('classes.session_agenda', view='review') }}" class="btn btn--secondary">Attendance needing review</a>
+</nav>
+<p class="text-muted">Attendance needing review includes Pending results from earlier dates.</p>

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Manage Enrollments - {{ class_info.course_name }} Class Code {{ class_info.class_code }}{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: center; justify-content: space-between;">
+        <div>
+            <h2>{{ class_info.course_name }} (Class Code {{ class_info.class_code }})</h2>
+            <p class="text-muted">Manage the student enrollments for this class.</p>
+        </div>
+        <a href="{{ url_for('classes.manage_classes') }}" class="btn btn--secondary" style="background: transparent; border: 1px solid var(--color-border); color: var(--color-text-primary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm);">Back to Classes</a>
+    </div>
+</div>
+
+{% if roster_locked %}
+<p class="flash flash--warning" role="status">Attendance is open for this class. End attendance before changing its roster. You can still review enrolled students.</p>
+{% endif %}
+<div id="roster-feedback" class="flash" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden></div>
+<a id="roster-reload" class="btn btn--secondary btn--sm" href="{{ url_for('classes.class_enrollments', class_id=class_info.id) }}" hidden>Reload Saved Roster</a>
+
+<div class="grid enrollments-container responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xl); margin-top: var(--space-lg);">
+    
+    <!-- Left Pane: Available Students -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); display: flex; flex-direction: column; max-height: 70vh;">
+        <div class="mobile-stack-header" style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-sm);">
+            <h3 style="margin: 0;">Available Students</h3>
+            <div class="mobile-action-group" style="display: flex; align-items: center; gap: var(--space-sm);">
+                <span id="selected-count" class="text-muted" style="font-size: var(--font-size-sm);">0 selected</span>
+                <button type="button" id="btn-enroll-selected" class="btn btn--primary btn--sm" disabled>
+                    Enroll Selected
+                </button>
+            </div>
+        </div>
+        <p class="form-hint">Only approved, active students who are not already enrolled appear here. <a href="{{ url_for('students.student_registration') }}">Register a student</a> if needed.</p>
+        <p class="form-hint">Search and filters stay when you refresh. Student selections clear when you refresh, change pages or change filters.</p>
+        <div class="responsive-filter-row" style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md);">
+            <label for="student-search" class="visually-hidden">Search available students</label>
+            <input type="search" id="student-search" maxlength="120" placeholder="Search by name or ID..." autocomplete="off"
+                   style="flex: 1; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+            <label for="program-filter" class="visually-hidden">Filter by program</label>
+            <select id="program-filter" style="width: 180px; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All Programs</option>
+                {% for prog in programs %}
+                <option value="{{ prog.id }}">{{ prog.name }}</option>
+                {% endfor %}
+            </select>
+            <label for="year-filter" class="visually-hidden">Filter by year level</label>
+            <select id="year-filter" style="width: 150px; padding: var(--space-sm) var(--space-md); background: var(--color-bg-input); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: var(--radius-sm);">
+                <option value="">All Years</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+                <option value="5th Year">5th Year</option>
+                <option value="6th Year">6th Year</option>
+                <option value="Irregular">Irregular</option>
+            </select>
+        </div>
+        <div class="mobile-action-group" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);align-items:center;margin-bottom:var(--space-sm);" aria-label="Available student pages">
+            <button id="roster-previous" type="button" class="btn btn--secondary btn--sm" disabled>Previous</button>
+            <span id="roster-page-status" role="status" class="form-hint">Loading students...</span>
+            <button id="roster-next" type="button" class="btn btn--secondary btn--sm" disabled>Next</button>
+            <button id="roster-clear" type="button" class="btn btn--secondary btn--sm">Clear Filters</button>
+            <button id="roster-retry" type="button" class="btn btn--secondary btn--sm" hidden>Retry Loading</button>
+        </div>
+        
+        <div id="available-list" style="overflow-y: auto; flex: 1; padding-right: var(--space-sm);">
+        </div>
+    </div>
+
+    <!-- Right Pane: Enrolled Students -->
+    <div class="card" style="background: var(--color-bg-card); padding: var(--space-lg); border-radius: var(--radius-lg); border: 1px solid var(--color-border); display: flex; flex-direction: column; max-height: 70vh;">
+        <h3 style="margin-bottom: var(--space-md);">Enrolled Students <span id="roster-enrolled-count">({{ enrolled|length }})</span></h3>
+        
+        <div id="enrolled-list" style="overflow-y: auto; flex: 1; padding-right: var(--space-sm);">
+            {% for student in enrolled %}
+            <div class="student-row" data-student-id="{{ student.id }}" style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm); border-bottom: 1px solid var(--color-border);">
+                <div>
+                    <div style="font-weight: var(--font-weight-medium);">{% if not student.permanently_removed_at %}<a href="{{ url_for('students.student_profile', student_id=student.id) }}" style="color: var(--color-primary); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">{{ student.name }}</a>{% else %}{{ student.name }}{% endif %}</div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">{{ student.student_id }}</div>
+                    {% if student.permanently_removed_at %}<small class="text-muted">Removed student (historical enrollment)</small>{% elif not student.is_active %}<small class="text-muted">Inactive student (historical enrollment)</small>{% endif %}
+                </div>
+                <button class="enrollment-action-btn" data-action="remove" aria-label="Remove {{ student.name }} from this class" {% if roster_locked %}disabled{% endif %} style="background: var(--color-error); color: white; border: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-size-xs);">Remove</button>
+            </div>
+            {% else %}
+            <p style="color: var(--color-text-muted); text-align: center; margin-top: var(--space-md);" class="empty-state">No students currently enrolled.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.SESSION_CONFIG = {
+        classId: "{{ class_info.id }}",
+        viewerId: {{ session.get("user_id")|tojson }},
+        enrollmentsApiUrl: "{{ url_for('api_class_enrollments', class_id=class_info.id) }}",
+        batchEnrollmentsApiUrl: "{{ url_for('api_class_enrollments_batch', class_id=class_info.id) }}",
+        rosterLocked: {{ roster_locked|default(false)|tojson }},
+        canViewUnenrolledProfiles: {{ has_permission('view_student_profiles')|tojson }}
+    };
+</script>
+<script src="{{ url_for('static', filename='js/roster.js') }}"></script>
+{% endblock %}

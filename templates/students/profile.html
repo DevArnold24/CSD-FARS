@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}{{ student.name }} - Profile{% endblock %}
+
+{% block content %}
+<div class="header" style="display: flex; flex-wrap: wrap; gap: var(--space-md); justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-md);">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); min-width: 0;">
+        {% set back_endpoint = 'students.student_directory' if has_permission('view_student_directory') else 'classes.manage_classes' %}
+        {% set back_label = 'Back to Directory' if has_permission('view_student_directory') else 'Back to Classes' %}
+        <a id="profile-back" href="{{ directory_return_url|default(url_for(back_endpoint)) if has_permission('view_student_directory') else url_for(back_endpoint) }}" class="btn btn--secondary btn--sm" title="{{ back_label }}" aria-label="{{ back_label }}">
+            {{ back_label }}
+        </a>
+        <div>
+            <h2 id="profile-name" style="margin: 0; line-height: 1.2;">{{ student.name }}</h2>
+            <p id="profile-summary" class="text-muted" style="margin: var(--space-xs) 0 0 0;">Student ID: {{ student.student_id }} &bull; Program: {{ student.program_name }} &bull; Year: {{ student.year_level }}</p>
+        </div>
+    </div>
+    <div>
+        {% if student.is_active %}
+            <span class="badge badge--success" style="padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); font-size: var(--font-size-sm); background-color: var(--color-success); color: white;">Active</span>
+        {% else %}
+            <span class="badge badge--error" style="padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); font-size: var(--font-size-sm); background-color: var(--color-error); color: white;">Deactivated</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid responsive-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-lg); margin-top: var(--space-lg);">
+    
+    <!-- Left Column: Biometrics & Danger Zone -->
+    <div class="column-left">
+        <div class="card">
+            <div class="card__header">
+                <h3 class="card__title">Biometric Status</h3>
+            </div>
+            <div class="card__body">
+                {% if student.consent_granted and student.embedding_count > 0 %}
+                    <p style="color: var(--color-success); font-weight: bold;">Enrolled and Ready</p>
+                    {% if student.biometric_updated_at %}
+                    <p class="text-muted">Latest face enrollment (UTC): <time datetime="{{ student.biometric_updated_at|replace(' ', 'T') }}Z">{{ student.biometric_updated_at }}</time></p>
+                    {% endif %}
+                {% else %}
+                    <p style="color: var(--color-error); font-weight: bold;">Needs Setup</p>
+                {% endif %}
+                
+                {% if has_permission('manage_student_biometrics') and student.is_active %}
+                <hr style="border: 0; border-top: 1px solid var(--color-border); margin: var(--space-md) 0;">
+                <p class="text-muted">Use a room camera or webcam to capture three new poses. Review the images and reconfirm consent before saving.</p>
+                <a class="btn btn--primary" href="{{ url_for('students.student_registration', reenroll=student.id) }}">Update Face Enrollment</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if has_permission('manage_student_status') %}
+        <div class="card" style="margin-top: var(--space-lg); border-color: var(--color-error);">
+            <div class="card__header">
+                <h3 class="card__title" style="color: var(--color-error);">Danger Zone</h3>
+            </div>
+            <div class="card__body">
+                <div id="profile-action-alert" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden class="flash"></div>
+                <a id="profile-action-reload" href="{{ profile_reload_url|default(url_for('students.student_profile', student_id=student.id)) }}" hidden>Reload Saved Profile</a>
+                <p class="text-muted" style="margin-bottom: var(--space-md);">
+                    {% if student.is_active %}
+                    Deactivating this student will hide them from active rosters and permanently purge their biometric data. Historical attendance records will remain.
+                    {% else %}
+                    Reactivating makes this student available for active rosters again. Capture a new face enrollment before using automatic recognition; historical attendance records remain.
+                    {% endif %}
+                </p>
+                <button type="button" class="btn btn--secondary" id="btn-toggle-status" data-active="{{ 'true' if student.is_active else 'false' }}" style="width: 100%; color: var(--color-error); border-color: var(--color-error);">
+                    {% if student.is_active %}Deactivate Student{% else %}Reactivate Student{% endif %}
+                </button>
+                {% if has_permission('permanently_remove_students') %}
+                <hr style="border: 0; border-top: 1px solid var(--color-border); margin: var(--space-lg) 0;">
+                <p class="text-muted" style="margin-bottom: var(--space-md);">
+                    Permanent removal is irreversible. It removes the student from active roster use and purges biometrics while preserving historical attendance, roster, and audit references.
+                </p>
+                <button type="button" class="btn btn--secondary" id="btn-permanent-remove" style="width: 100%; color: var(--color-error); border-color: var(--color-error);">
+                    Permanently Remove Student
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Info, Classes, Attendance -->
+    <div class="column-right">
+        
+        <!-- Metadata Edit -->
+        <div class="card" style="margin-bottom: var(--space-lg);">
+            <div class="card__header">
+                <h3 class="card__title">Student Information</h3>
+            </div>
+            <div class="card__body">
+                <form id="edit-student-form">
+                    <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                        <div class="form-group">
+                            <label class="form-label" for="student_id">Student ID</label>
+                            <input class="form-input" type="text" id="student_id" name="student_id" value="{{ student.student_id }}" required {% if not has_permission('edit_student_metadata') %}readonly{% endif %}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="name">Full Name</label>
+                            <input class="form-input" type="text" id="name" name="name" value="{{ student.name }}" required {% if not has_permission('edit_student_metadata') %}readonly{% endif %}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="program_id">Program</label>
+                            {% if has_permission('edit_student_metadata') %}
+                            <select class="form-select" id="program_id" name="program_id" required>
+                                {% for prog in programs %}
+                                <option value="{{ prog.id }}" {% if prog.id == student.program_id %}selected{% endif %}>{{ prog.name }}{% if not prog.is_active %} (Inactive, current assignment){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <input class="form-input" type="text" value="{{ student.program_name }}" readonly>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="year_level">Year Level</label>
+                            {% if has_permission('edit_student_metadata') %}
+                            <select class="form-select" id="year_level" name="year_level" required>
+                                {% for year in ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "6th Year", "Irregular"] %}
+                                <option value="{{ year }}" {% if year == student.year_level %}selected{% endif %}>{{ year }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <input class="form-input" type="text" value="{{ student.year_level }}" readonly>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if session.get('role') == 'Dean' %}
+                    <div id="profile-alert" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden class="flash" style="margin-top: var(--space-md);"></div>
+                    <a id="profile-reload" href="{{ profile_reload_url|default(url_for('students.student_profile', student_id=student.id)) }}" hidden>Reload Saved Profile</a>
+                    <div style="margin-top: var(--space-md); text-align: right;">
+                        <button id="profile-save" type="submit" class="btn btn--primary">Save Changes</button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+
+        {% if can_view_enrollments %}
+        <!-- Enrolled Classes -->
+        <div class="card" style="margin-bottom: var(--space-lg);">
+            <div class="card__header">
+                <h3 class="card__title">Enrolled Classes</h3>
+                <p class="card__subtitle">Archived classes remain listed for reference.</p>
+            </div>
+            <div class="card__body">
+                {% if enrolled_classes %}
+                <div class="responsive-table-region" role="region" aria-label="Scrollable enrolled classes" tabindex="0">
+                <table class="table student-profile-enrollments-table" aria-label="Enrolled classes" style="width: 100%;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 1px solid var(--color-border);">
+                            <th>Class Code</th>
+                            <th>Course Name</th>
+                            <th>Schedule</th>
+                            <th>Teacher</th>
+                            <th>Class Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in enrolled_classes %}
+                        <tr style="border-bottom: 1px solid var(--color-border);">
+                            <td style="padding: var(--space-sm) 0;">
+                                <a href="{{ url_for('classes.class_detail', class_id=c.id) }}" style="color: var(--color-primary); text-decoration: none;">{{ c.class_code }}</a>
+                            </td>
+                            <td>{{ c.course_name }}</td>
+                            <td class="text-muted">{{ c.days_of_week }} {{ c.start_time }}-{{ c.end_time }}</td>
+                            <td>{{ c.teacher_name }}</td>
+                            <td><span class="badge {{ 'badge--secondary' if c.is_archived else 'badge--success' }}">{{ 'Archived' if c.is_archived else 'Current' }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No class enrollments found.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if can_view_attendance %}
+        <!-- Attendance History -->
+        <div class="card">
+            <div class="card__header">
+                <h3 class="card__title">Attendance History</h3>
+                <p class="card__subtitle">{% if session.get('role') == 'Teacher' %}Showing records for your classes only.{% else %}Showing all historical records.{% endif %}</p>
+                <p>Saved occurrence membership and statuses, including Pending. Class and student details reflect current records. Blank dates mean all historical dates.</p>
+                <form method="get"><label>From <input type="date" name="history_start_date" value="{{ history_filters.start_date }}"></label> <label>Through <input type="date" name="history_end_date" value="{{ history_filters.end_date }}"></label> <label>Status <select name="history_status"><option value="">All statuses</option>{% for status in ('Present', 'Late', 'Absent', 'Excused', 'Pending') %}<option {% if history_filters.status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>{% if history_query.directory %}<input type="hidden" name="directory" value="{{ history_query.directory }}">{% endif %} <button class="btn btn--secondary" type="submit">Filter history</button></form>
+                {% if history_error %}<p role="alert">{{ history_error }}</p>{% endif %}
+            </div>
+            <div class="card__body">
+                {% if attendance %}
+                <div class="responsive-table-region responsive-table-region--vertical" role="region" aria-label="Scrollable attendance history" tabindex="0">
+                    <table class="table student-profile-attendance-table" aria-label="Attendance history" style="width: 100%;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid var(--color-border); position: sticky; top: 0; background: var(--color-surface);">
+                                <th>Occurrence / recorded at (institution time)</th>
+                                <th>Class</th>
+                                <th>Status</th>
+                                <th>Source/Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in attendance %}
+                            <tr style="border-bottom: 1px solid var(--color-border);">
+                                <td style="padding: var(--space-sm) 0;" class="text-muted">{{ record.session_date }} {{ record.scheduled_start_time }}{% if record.session_id %}<br><a href="{{ url_for('classes.class_session_report', class_id=record.class_id, attendance_session_id=record.session_id) }}">Occurrence #{{ record.session_id }}</a>{% endif %}<br>Recorded: {{ record.timestamp }}</td>
+                                <td>{{ record.class_code }}</td>
+                                <td>
+                                    <span class="badge {% if record.status == 'Present' %}badge--success{% elif record.status == 'Late' %}badge--warning{% elif record.status == 'Absent' %}badge--danger{% else %}badge--secondary{% endif %}">
+                                        {{ record.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm);">
+                                        {{ {'face_recognition': 'Camera recognition', 'manual_edit': 'Manual correction', 'system': 'System'}.get(record.source, record.source or 'Not recorded') }}
+                                        {% if record.reason %}
+                                        <br><span class="text-muted">{{ record.reason }} {% if record.updated_by %}(by {{ record.updated_by }}){% endif %}</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No attendance records found.</p>
+                {% endif %}
+                <nav aria-label="Student history pages"><p>{{ history_total }} matching entries · Page {{ history_page }} of {{ history_pages }}</p>{% if history_page > 1 %}<a href="{{ url_for('students.student_profile', student_id=student.id, history_page=history_page-1, **history_query) }}">Previous history</a>{% endif %} {% if history_page < history_pages %}<a href="{{ url_for('students.student_profile', student_id=student.id, history_page=history_page+1, **history_query) }}">Next history</a>{% endif %}</nav>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if has_permission('edit_student_metadata') or has_permission('manage_student_status') %}
+<script id="profile-config" type="application/json">{{ {
+    "updateUrl": url_for('students.api_update_student', student_id=student.id),
+    "statusUrl": url_for('students.api_update_student_status', student_id=student.id),
+    "directoryUrl": directory_return_url|default(url_for('students.student_directory'))
+}|tojson }}</script>
+<script src="{{ url_for('static', filename='js/student-profile.js') }}"></script>
+{% endif %}
+{% endblock %}
